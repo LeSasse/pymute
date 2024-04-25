@@ -30,6 +30,10 @@ pub struct Cli {
     #[arg(short, long)]
     #[arg(default_value = ".")]
     tests: String,
+
+    #[arg(short, long)]
+    #[arg(default_value = "1")]
+    num_threads: usize,
 }
 
 fn main() {
@@ -40,6 +44,12 @@ fn main() {
             .into_os_string()
             .to_str()
             .expect("Invalid Glob Expression?"),
-    );
+    )
+    .expect("Failed to find mutants!");
+
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(args.num_threads)
+        .build_global()
+        .expect("Failed to set the number of threads using rayon.");
     pytest::pytest_mutants(&mutants, &args.root, &args.tests);
 }

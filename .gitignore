@@ -2,3 +2,4 @@
 .pytest*
 **/__pycache__
 target
+mutants.out
