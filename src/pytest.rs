@@ -45,8 +45,24 @@ fn run_mutant(mutant: &Mutant, root: &PathBuf, tests_glob: &String) {
                     .yellow(),
                 mutant.line_number.to_string().yellow(),
             )
+        } else {
+            println!(
+                "[{}] Mutant Killed: {} replaced by {} in file {} on line {}",
+                "CAUGHT".green(),
+                mutant.before.green(),
+                mutant.after.red(),
+                mutant
+                    .file_path
+                    .clone()
+                    .into_os_string()
+                    .to_str()
+                    .expect("Failed to convert file path to string!")
+                    .yellow(),
+                mutant.line_number.to_string().yellow(),
+            )
         }
     }
+    dir.close().unwrap();
 }
 
 /// Run pytest for all mutants each in their own temporary directory.

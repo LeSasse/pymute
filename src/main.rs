@@ -47,9 +47,12 @@ fn main() {
     )
     .expect("Failed to find mutants!");
 
+    let n_mutants = mutants.len();
+    println!("Found {n_mutants} mutants! Running in temporary directory...");
     rayon::ThreadPoolBuilder::new()
         .num_threads(args.num_threads)
         .build_global()
         .expect("Failed to set the number of threads using rayon.");
+
     pytest::pytest_mutants(&mutants, &args.root, &args.tests);
 }
