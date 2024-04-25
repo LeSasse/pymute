@@ -1,6 +1,6 @@
 use glob::glob;
 use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 pub fn find_mutants(glob_expression: &str) -> Vec<Mutant> {
@@ -35,8 +35,8 @@ pub struct Mutant {
 
 impl Mutant {
     pub fn insert(&self, root: &Path, new_root: &Path) {
-        let file_from_root = self.file_path.strip_prefix(&root).unwrap();
-        let path_to_mutant = new_root.join(&file_from_root);
+        let file_from_root = self.file_path.strip_prefix(root).unwrap();
+        let path_to_mutant = new_root.join(file_from_root);
 
         let file = File::open(&path_to_mutant).unwrap();
         let reader = BufReader::new(file);
@@ -52,10 +52,10 @@ impl Mutant {
 
 fn replacement_from_line(line: &str) -> Option<(String, String)> {
     match line {
-        _l if line.contains("+") => Some(("+".into(), "-".into())),
-        _l if line.contains("-") => Some(("-".into(), "+".into())),
-        _l if line.contains("*") => Some(("*".into(), "/".into())),
-        _l if line.contains("/") => Some(("/".into(), "*".into())),
+        _l if line.contains('+') => Some(("+".into(), "-".into())),
+        _l if line.contains('-') => Some(("-".into(), "+".into())),
+        _l if line.contains('*') => Some(("*".into(), "/".into())),
+        _l if line.contains('/') => Some(("/".into(), "*".into())),
         _l if line.contains(" and ") => Some((" and ".into(), " or ".into())),
         _l if line.contains(" or ") => Some((" or ".into(), " and ".into())),
         _ => None,
@@ -68,20 +68,20 @@ fn add_mutants_from_file(mutant_vec: &mut Vec<Mutant>, path: &PathBuf) {
     for (line_nr, line_result) in reader.lines().enumerate() {
         // ignore comments
         let line = line_result.unwrap();
-        if line.starts_with("#") {
+        if line.starts_with('#') {
             continue;
         }
 
         // also only consider stuff on left of comment
-        let line = line.split("#").collect::<Vec<_>>()[0];
+        let line = line.split('#').collect::<Vec<_>>()[0];
         let replacement = replacement_from_line(line);
         match replacement {
             Some((before, after)) => {
                 let mutant = Mutant {
                     file_path: path.clone(),
                     line_number: line_nr + 1,
-                    before: before,
-                    after: after,
+                    before,
+                    after,
                 };
                 mutant_vec.push(mutant);
             }
