@@ -89,7 +89,7 @@ mod tests {
         io::Write,
         path::PathBuf,
     };
-    use tempfile::{tempdir, NamedTempFile};
+    use tempfile::tempdir;
 
     #[test]
     fn test_pytest_mutants() {
@@ -189,6 +189,8 @@ print(res) # print the result +
         let mutants_vec = mutants::find_mutants(&glob_expr).unwrap();
 
         assert_eq!(mutants_vec.len(), 7);
-        pytest::pytest_mutants(&mutants_vec, &PathBuf::from(base_path), &".".into())
+        pytest::pytest_mutants(&mutants_vec, &PathBuf::from(base_path), &".".into());
+
+        temp_dir.close().unwrap();
     }
 }

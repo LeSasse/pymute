@@ -252,6 +252,8 @@ print(res) # print the result +
         let mutants_vec = mutants::find_mutants(&glob_expr).unwrap();
 
         assert_eq!(mutants_vec.len(), 7);
+
+        temp_dir.close().unwrap();
     }
 
     #[test]
