@@ -10,7 +10,10 @@ edition = "2021"
 clap = { version = "4.5.4", features = ["cargo", "derive"]}
 colored = "2.1.0"
 cp_r = "0.5.1"
+ctrlc = "3.4.4"
 glob = "0.3.1"
+indicatif = { version = "0.17.8", features = ["rayon"]}
+rand = "0.8.5"
 rayon = "1.10.0"
 regex = "1.10.4"
 tempfile = "3.10.1"

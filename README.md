@@ -106,3 +106,13 @@ that end with `*_test.py` so as to not create mutations for pytest tests.
 The `--tests` option tells pymute to run only tests in `junifer/datagrabber/tests/`.
 
 
+```toml
+[testenv:test_datagrabber]
+skip_install = false
+passenv =
+    HOME
+deps =
+    pytest
+commands =
+    pytest junifer/datagrabber/tests/
+```

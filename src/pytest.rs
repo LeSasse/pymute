@@ -2,68 +2,19 @@
 
 use crate::mutants::Mutant;
 use cp_r::CopyOptions;
+use indicatif::{
+    self, style::ProgressStyle, ParallelProgressIterator, ProgressBar, ProgressIterator,
+};
+
 use rayon::prelude::*;
 
+use std::error::Error;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tempfile::tempdir;
 
 use colored::Colorize;
-
-/// Run pytest for one mutant in a temporary directory
-fn run_mutant(mutant: &Mutant, root: &PathBuf, tests_glob: &String) {
-    let dir = tempdir().expect("Failed to create temporary directory!");
-    let root_path = root;
-
-    let _stats = CopyOptions::new()
-        .copy_tree(root_path, dir.path())
-        .expect("Failed to copy the Python project root!");
-
-    let _ = mutant.insert(root_path, dir.path());
-
-    let output = Command::new("pytest")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .arg("-x")
-        .arg(tests_glob)
-        .current_dir(&dir)
-        .status();
-
-    if let Ok(status) = output {
-        if status.success() {
-            println!(
-                "[{}] Mutant Survived: {} replaced by {} in file {} on line {}",
-                "MISSED".red(),
-                mutant.before.green(),
-                mutant.after.red(),
-                mutant
-                    .file_path
-                    .clone()
-                    .into_os_string()
-                    .to_str()
-                    .expect("Failed to convert file path to string!")
-                    .yellow(),
-                mutant.line_number.to_string().yellow(),
-            )
-        } else {
-            println!(
-                "[{}] Mutant Killed: {} replaced by {} in file {} on line {}",
-                "CAUGHT".green(),
-                mutant.before.green(),
-                mutant.after.red(),
-                mutant
-                    .file_path
-                    .clone()
-                    .into_os_string()
-                    .to_str()
-                    .expect("Failed to convert file path to string!")
-                    .yellow(),
-                mutant.line_number.to_string().yellow(),
-            )
-        }
-    }
-    dir.close().unwrap();
-}
 
 /// Run pytest for all mutants each in their own temporary directory.
 ///
@@ -74,10 +25,226 @@ fn run_mutant(mutant: &Mutant, root: &PathBuf, tests_glob: &String) {
 /// mutants: Vec of Mutants for which to run pytest in individual sub-processes.
 /// root: PathBuf to the root of the original python project.
 /// tests: Path to the tests to run via pytest as string.
-pub fn pytest_mutants(mutants: &Vec<Mutant>, root: &PathBuf, tests: &String) {
-    mutants.par_iter().for_each(|mutant| {
-        run_mutant(mutant, root, tests);
-    })
+pub fn pytest_mutants(
+    mutants: &Vec<Mutant>,
+    root: &PathBuf,
+    tests: &String,
+    output_level: &OutputLevel,
+    runner: &Runner,
+    environment: &Option<String>,
+) {
+    //let new_line = "\n";
+
+    let bar = ProgressBar::new(mutants.len().try_into().unwrap());
+    bar.set_style(
+        ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        )
+        .unwrap(),
+    );
+
+    mutants
+        .par_iter()
+        .progress_with(bar.clone())
+        .for_each(|mutant| {
+            bar.set_message(format!("[{}]: {mutant}\r", "RUNNING".yellow()));
+            let result = run_mutant(mutant, root, tests, output_level, runner, environment)
+                .expect(format!("Mutant run failed for {mutant}").as_str());
+
+            match result {
+                MutantResult::Missed => {
+                    bar.println(format!("[{}] Mutant Survived: {}", "MISSED".red(), mutant));
+                }
+                _ => {
+                    if let OutputLevel::Missed = output_level {
+                    } else {
+                        bar.println(format!("[{}] Mutant Killed: {}", "CAUGHT".green(), mutant));
+                    };
+                }
+            }
+        });
+}
+
+pub fn pytest_mutants_inplace(
+    mutants: &Vec<Mutant>,
+    root: &PathBuf,
+    tests: &String,
+    output_level: &OutputLevel,
+    runner: &Runner,
+    environment: &Option<String>,
+    num_threads: &usize,
+) {
+    let bar = ProgressBar::new(mutants.len().try_into().unwrap());
+    bar.set_style(
+        ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7}")
+            .unwrap(),
+    );
+    mutants
+        .iter()
+        .progress_with(bar.clone())
+        .for_each(|mutant| {
+            let result = run_mutant_inplace(
+                mutant,
+                root,
+                tests,
+                output_level,
+                runner,
+                environment,
+                num_threads,
+            )
+            .expect(format!("Mutant run failed for {}", mutant).as_str());
+
+            match result {
+                MutantResult::Missed => {
+                    bar.println(format!("[{}] Mutant Survived: {}", "MISSED".red(), mutant));
+                }
+                _ => {
+                    if let OutputLevel::Missed = output_level {
+                    } else {
+                        bar.println(format!("[{}] Mutant Killed: {}", "CAUGHT".green(), mutant));
+                    };
+                }
+            }
+        })
+}
+
+pub enum OutputLevel {
+    /// missed: print out only mutants that were missed by the tests.
+    Missed,
+    /// caught: print out also mutants that were caught by the tests.
+    Caught,
+    /// process: print out also output from the individual processes.
+    Process,
+}
+
+pub enum Runner {
+    Pytest,
+    Tox,
+}
+
+fn run_mutant_inplace(
+    mutant: &Mutant,
+    root: &PathBuf,
+    tests_glob: &String,
+    output_level: &OutputLevel,
+    runner: &Runner,
+    environment: &Option<String>,
+    num_threads: &usize,
+) -> Result<MutantResult, Box<dyn Error>> {
+    mutant.insert().expect("Failed to insert the mutant!");
+    let output = match (runner, output_level, environment) {
+        (Runner::Pytest, OutputLevel::Process, _) => Command::new("python")
+            .arg("-B")
+            .arg("-m")
+            .arg("pytest")
+            .arg("-x")
+            .arg(format!("-n {}", num_threads))
+            .arg("--cache-clear")
+            .arg(tests_glob)
+            .current_dir(root)
+            .status(),
+        (Runner::Pytest, _, _) => Command::new("python")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .arg("-B")
+            .arg("-m")
+            .arg("pytest")
+            .arg("-x")
+            .arg(format!("-n {}", num_threads))
+            .arg("--cache-clear")
+            .arg(tests_glob)
+            .current_dir(root)
+            .status(),
+        (Runner::Tox, OutputLevel::Process, Some(env)) => Command::new("tox")
+            .arg(format!("-e {env}"))
+            .current_dir(root)
+            .status(),
+        (Runner::Tox, OutputLevel::Process, None) => Command::new("tox").current_dir(root).status(),
+        (Runner::Tox, _, Some(env)) => Command::new("tox")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .arg(format!("-e {env}"))
+            .current_dir(root)
+            .status(),
+        (Runner::Tox, _, None) => Command::new("tox")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .current_dir(root)
+            .status(),
+    };
+
+    mutant.remove().expect("Failed to remove the mutant!");
+    let status = output?;
+
+    if status.success() {
+        Ok(MutantResult::Missed)
+    } else {
+        Ok(MutantResult::Caught)
+    }
+}
+
+/// Run pytest for one mutant in a temporary directory
+fn run_mutant(
+    mutant: &Mutant,
+    root: &PathBuf,
+    tests_glob: &String,
+    output_level: &OutputLevel,
+    runner: &Runner,
+    environment: &Option<String>,
+) -> Result<MutantResult, Box<dyn Error>> {
+    let dir = tempdir().expect("Failed to create temporary directory!");
+
+    let root_path = root;
+    let _stats = CopyOptions::new()
+        .copy_tree(root_path, dir.path())
+        .expect("Failed to copy the Python project root!");
+
+    let _ = mutant.insert_in_new_root(root_path, dir.path());
+
+    let output = match (runner, output_level, environment) {
+        (Runner::Pytest, OutputLevel::Process, _) => Command::new("pytest")
+            .arg("-x")
+            .arg(tests_glob)
+            .current_dir(&dir)
+            .status(),
+        (Runner::Pytest, _, _) => Command::new("pytest")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .arg("-x")
+            .arg(tests_glob)
+            .current_dir(&dir)
+            .status(),
+        (Runner::Tox, OutputLevel::Process, Some(env)) => Command::new("tox")
+            .arg(format!("-e {env}"))
+            .current_dir(&dir)
+            .status(),
+        (Runner::Tox, OutputLevel::Process, None) => Command::new("tox").current_dir(&dir).status(),
+        (Runner::Tox, _, Some(env)) => Command::new("tox")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .arg(format!("-e {env}"))
+            .current_dir(&dir)
+            .status(),
+        (Runner::Tox, _, None) => Command::new("tox")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .current_dir(&dir)
+            .status(),
+    };
+    dir.close().unwrap();
+
+    let status = output?;
+
+    if status.success() {
+        Ok(MutantResult::Missed)
+    } else {
+        Ok(MutantResult::Caught)
+    }
+}
+
+enum MutantResult {
+    Caught,
+    Missed,
 }
 
 #[cfg(test)]

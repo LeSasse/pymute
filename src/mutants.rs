@@ -1,6 +1,9 @@
+use colored::Colorize;
 use glob::glob;
 use regex::Regex;
+use std::env;
 use std::error::Error;
+use std::fmt;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -53,6 +56,8 @@ pub struct Mutant {
     pub before: String,
     /// The replacement string.
     pub after: String,
+    /// The line before inserting the mutant.
+    old_line: String,
 }
 
 impl Mutant {
@@ -69,7 +74,7 @@ impl Mutant {
     /// root. The mutant is then inserted into the copied version of the file
     /// where the potential mutant was found (i.e. it will be inserted into
     /// new_root / mutant_file_path_stripped_of_root)
-    pub fn insert(&self, root: &Path, new_root: &Path) -> Result<(), Box<dyn Error>> {
+    pub fn insert_in_new_root(&self, root: &Path, new_root: &Path) -> Result<(), Box<dyn Error>> {
         let file_from_root = self.file_path.strip_prefix(root)?;
         let path_to_mutant = new_root.join(file_from_root);
 
@@ -84,31 +89,64 @@ impl Mutant {
         fs::write(&path_to_mutant, lines.join("\n")).expect("");
         Ok(())
     }
+
+    pub fn insert(&self) -> Result<(), Box<dyn Error>> {
+        let file_path = self.file_path.as_path();
+        let file = File::open(file_path)?;
+        let reader = BufReader::new(file);
+
+        // read all lines into a vector
+        let mut lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
+        lines[self.line_number - 1] =
+            lines[self.line_number - 1].replace(&self.before, &self.after);
+
+        fs::write(file_path, lines.join("\n")).expect("");
+        Ok(())
+    }
+
+    pub fn remove(&self) -> Result<(), Box<dyn Error>> {
+        let file_path = self.file_path.as_path();
+        let file = File::open(file_path)?;
+        let reader = BufReader::new(file);
+
+        // read all lines into a vector
+        let mut lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
+        // revert the insert
+        lines[self.line_number - 1] = self.old_line.clone();
+
+        if env::consts::OS == "windows" {
+            let last = lines.pop().unwrap();
+            lines.push(format!("{last}\r\n"));
+            fs::write(file_path, lines.join("\r\n"));
+        } else {
+            let last = lines.pop().unwrap();
+            lines.push(format!("{last}\n"));
+            fs::write(file_path, lines.join("\n"));
+        }
+        Ok(())
+    }
 }
 
-fn remove_quotes(input: &str) -> String {
-    let re = Regex::new(r#"'[^']*'|"[^"]*""#).unwrap();
-    re.replace_all(input, "").to_string()
-}
-
-fn replacement_from_line(line: &str) -> Option<(String, String)> {
-    let line = remove_quotes(line);
-    match line {
-        _l if line.contains('+') => Some(("+".into(), "-".into())),
-        _l if line.contains('-') => Some(("-".into(), "+".into())),
-        _l if line.contains('*') => Some(("*".into(), "/".into())),
-        _l if line.contains('/') => Some(("/".into(), "*".into())),
-        _l if line.contains(" and ") => Some((" and ".into(), " or ".into())),
-        _l if line.contains(" or ") => Some((" or ".into(), " and ".into())),
-        _l if line.contains(" True ") => Some((" True ".into(), " False ".into())),
-        _l if line.contains(" False ") => Some((" False ".into(), " True ".into())),
-        _l if line.contains(" else: ") => Some((" else: ".into(), " elif False: ".into())),
-        _l if line.contains(" if not ") => Some((" if not ".into(), " if ".into())),
-        _l if line.contains(">") => Some((">".into(), "<".into())),
-        _l if line.contains("<") => Some(("<".into(), ">".into())),
-        _l if line.contains("==") => Some(("==".into(), "!=".into())),
-        _l if line.contains("!=") => Some(("!=".into(), "==".into())),
-        _ => None,
+impl fmt::Display for Mutant {
+    // This trait requires `fmt` with this exact signature.
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // Write strictly the first element into the supplied output
+        // stream: `f`. Returns `fmt::Result` which indicates whether the
+        // operation succeeded or failed. Note that `write!` uses syntax which
+        // is very similar to `println!`.
+        write!(
+            f,
+            "{} replaced by {} in file {} on line {}",
+            self.before.green(),
+            self.after.red(),
+            self.file_path
+                .clone()
+                .into_os_string()
+                .to_str()
+                .expect("Failed to convert file path to string!")
+                .yellow(),
+            self.line_number.to_string().yellow(),
+        )
     }
 }
 
@@ -118,23 +156,46 @@ fn add_mutants_from_file(
 ) -> Result<(), Box<dyn Error>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
+
+    let mut in_docstring = false;
+    let docstring_markers = vec!["\"\"\"", "'''"];
+
     for (line_nr, line_result) in reader.lines().enumerate() {
         // ignore comments
         let line = line_result?;
+
+        if docstring_markers
+            .iter()
+            .any(|&marker| line.matches(marker).count() == 2)
+        {
+            continue;
+        }
+
+        if docstring_markers
+            .iter()
+            .any(|&marker| line.contains(marker))
+        {
+            in_docstring = !in_docstring;
+        }
         if line.starts_with('#') {
             continue;
         }
 
+        if in_docstring {
+            continue;
+        }
+
         // also only consider stuff on left of comment
-        let line = line.split('#').collect::<Vec<_>>()[0];
-        let replacement = replacement_from_line(line);
+        let line_split = line.split('#').collect::<Vec<_>>()[0];
+        let replacement = replacement_from_line(line_split);
         match replacement {
             Some((before, after)) => {
                 let mutant = Mutant {
                     file_path: path.clone(),
                     line_number: line_nr + 1,
-                    before,
-                    after,
+                    before: before,
+                    after: after,
+                    old_line: line,
                 };
                 mutant_vec.push(mutant);
             }
@@ -143,6 +204,47 @@ fn add_mutants_from_file(
         };
     }
     Ok(())
+}
+
+fn remove_quotes(input: &str) -> String {
+    let re = Regex::new(r#"'[^']*'|"[^"]*""#).unwrap();
+    re.replace_all(input, "").to_string()
+}
+
+fn replacement_from_line(line: &str) -> Option<(String, String)> {
+    let line = remove_quotes(line);
+    let replacements = vec![
+        // mathematical operators
+        (" + ", " - "),
+        (" - ", " + "),
+        (" * ", " / "),
+        (" / ", " * "),
+        // conjunctions
+        (" and ", " or "),
+        (" or ", " and "),
+        // booleans
+        (" True ", " False "),
+        (" False ", " True "),
+        // control flow
+        (" else: ", " elif False: "),
+        (" if not ", " if "),
+        (" if ", " if not "),
+        // comparisons
+        (" > ", " < "),
+        (" < ", " > "),
+        ("==", "!="),
+        ("!=", "=="),
+        // numpy/pandas shenanigans
+        ("std(", "mean("),
+        ("mean(", "std("),
+        // other built-ins
+        ("range(", "list("),
+    ];
+
+    replacements
+        .iter()
+        .find(|(from, _)| line.contains(from))
+        .map(|&(from, to)| (from.into(), to.into()))
 }
 
 #[cfg(test)]
