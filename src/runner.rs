@@ -16,16 +16,16 @@ use tempfile::tempdir;
 
 use colored::Colorize;
 
-/// Run pytest for all mutants each in their own temporary directory.
+/// Run tests for all mutants each in their own temporary directory.
 ///
 /// Run in parallel using rayon.
 ///
 /// Parameters
 /// ----------
-/// mutants: Vec of Mutants for which to run pytest in individual sub-processes.
+/// mutants: Vec of Mutants for which to run tests in individual sub-processes.
 /// root: PathBuf to the root of the original python project.
-/// tests: Path to the tests to run via pytest as string.
-pub fn pytest_mutants(
+/// tests: Path to the tests to run via tests as string.
+pub fn run_mutants(
     mutants: &Vec<Mutant>,
     root: &PathBuf,
     tests: &String,
@@ -65,7 +65,7 @@ pub fn pytest_mutants(
         });
 }
 
-pub fn pytest_mutants_inplace(
+pub fn run_mutants_inplace(
     mutants: &Vec<Mutant>,
     root: &PathBuf,
     tests: &String,
@@ -183,7 +183,7 @@ fn run_mutant_inplace(
     }
 }
 
-/// Run pytest for one mutant in a temporary directory
+/// Run tests for one mutant in a temporary directory
 fn run_mutant(
     mutant: &Mutant,
     root: &PathBuf,

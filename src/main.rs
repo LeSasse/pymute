@@ -1,5 +1,5 @@
 use pymute::mutants::find_mutants;
-use pymute::pytest;
+use pymute::runner;
 use rand::{seq::IteratorRandom, thread_rng};
 
 use clap::{Parser, ValueEnum};
@@ -72,14 +72,14 @@ fn main() {
     let modules: PathBuf = [&args.root, &args.modules.into()].iter().collect();
 
     let output_level = match args.output_level {
-        OutputLevelCli::Missed => pytest::OutputLevel::Missed,
-        OutputLevelCli::Caught => pytest::OutputLevel::Caught,
-        OutputLevelCli::Process => pytest::OutputLevel::Process,
+        OutputLevelCli::Missed => runner::OutputLevel::Missed,
+        OutputLevelCli::Caught => runner::OutputLevel::Caught,
+        OutputLevelCli::Process => runner::OutputLevel::Process,
     };
 
     let runner = match args.runner {
-        RunnerCli::Pytest => pytest::Runner::Pytest,
-        RunnerCli::Tox => pytest::Runner::Tox,
+        RunnerCli::Pytest => runner::Runner::Pytest,
+        RunnerCli::Tox => runner::Runner::Tox,
     };
 
     let mutants = match args.max_mutants {
@@ -113,10 +113,10 @@ fn main() {
         return;
     }
 
-    let n_mutants = mutants.len();
+    let _n_mutants = mutants.len();
 
     if args.inplace {
-        pytest::pytest_mutants_inplace(
+        runner::run_mutants_inplace(
             &mutants,
             &args.root,
             &args.tests,
@@ -131,7 +131,7 @@ fn main() {
             .build_global()
             .expect("Failed to set the number of threads using rayon.");
 
-        pytest::pytest_mutants(
+        runner::run_mutants(
             &mutants,
             &args.root,
             &args.tests,
