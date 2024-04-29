@@ -33,8 +33,7 @@ pub struct Cli {
     tests: String,
 
     #[arg(short, long)]
-    #[arg(default_value = "1")]
-    num_threads: usize,
+    num_threads: Option<usize>,
 
     /// Output level of the program
     #[arg(short, long)]
@@ -55,7 +54,7 @@ pub struct Cli {
 
     /// Maximum number of mutants to be run. If set, will choose a random subset
     /// of n mutants.
-    #[arg(short, long)]
+    #[arg(long)]
     max_mutants: Option<usize>,
 
     /// Whether to run inplace.
@@ -126,11 +125,12 @@ fn main() {
             &args.num_threads,
         )
     } else {
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(args.num_threads)
-            .build_global()
-            .expect("Failed to set the number of threads using rayon.");
-
+        if let Some(n) = args.num_threads {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(n)
+                .build_global()
+                .expect("Failed to set the number of threads using rayon.");
+        }
         runner::run_mutants(
             &mutants,
             &args.root,

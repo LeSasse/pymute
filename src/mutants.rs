@@ -161,7 +161,7 @@ fn add_mutants_from_file(
     let reader = BufReader::new(file);
 
     let mut in_docstring = false;
-    let docstring_markers = vec!["\"\"\"", "'''"];
+    let docstring_markers = ["\"\"\"", "'''"];
 
     for (line_nr, line_result) in reader.lines().enumerate() {
         // ignore comments
@@ -196,8 +196,8 @@ fn add_mutants_from_file(
                 let mutant = Mutant {
                     file_path: path.clone(),
                     line_number: line_nr + 1,
-                    before: before,
-                    after: after,
+                    before,
+                    after,
                     old_line: line,
                 };
                 mutant_vec.push(mutant);

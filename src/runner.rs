@@ -49,7 +49,7 @@ pub fn run_mutants(
         .for_each(|mutant| {
             bar.set_message(format!("[{}]: {mutant}\r", "RUNNING".yellow()));
             let result = run_mutant(mutant, root, tests, output_level, runner, environment)
-                .expect(format!("Mutant run failed for {mutant}").as_str());
+                .unwrap_or_else(|_| panic!("Mutant run failed for {mutant}"));
 
             match result {
                 MutantResult::Missed => {
@@ -66,13 +66,13 @@ pub fn run_mutants(
 }
 
 pub fn run_mutants_inplace(
-    mutants: &Vec<Mutant>,
+    mutants: &[Mutant],
     root: &PathBuf,
     tests: &String,
     output_level: &OutputLevel,
     runner: &Runner,
     environment: &Option<String>,
-    num_threads: &usize,
+    num_threads: &Option<usize>,
 ) {
     let bar = ProgressBar::new(mutants.len().try_into().unwrap());
     bar.set_style(
@@ -92,7 +92,7 @@ pub fn run_mutants_inplace(
                 environment,
                 num_threads,
             )
-            .expect(format!("Mutant run failed for {}", mutant).as_str());
+            .unwrap_or_else(|_| panic!("Mutant run failed for {}", mutant));
 
             match result {
                 MutantResult::Missed => {
@@ -129,52 +129,86 @@ fn run_mutant_inplace(
     output_level: &OutputLevel,
     runner: &Runner,
     environment: &Option<String>,
-    num_threads: &usize,
+    num_threads: &Option<usize>,
 ) -> Result<MutantResult, Box<dyn Error>> {
     mutant.insert().expect("Failed to insert the mutant!");
-    let output = match (runner, output_level, environment) {
-        (Runner::Pytest, OutputLevel::Process, _) => Command::new("python")
-            .arg("-B")
-            .arg("-m")
-            .arg("pytest")
-            .arg("-x")
-            .arg(format!("-n {}", num_threads))
-            .arg("--cache-clear")
-            .arg(tests_glob)
-            .current_dir(root)
-            .status(),
-        (Runner::Pytest, _, _) => Command::new("python")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .arg("-B")
-            .arg("-m")
-            .arg("pytest")
-            .arg("-x")
-            .arg(format!("-n {}", num_threads))
-            .arg("--cache-clear")
-            .arg(tests_glob)
-            .current_dir(root)
-            .status(),
-        (Runner::Tox, OutputLevel::Process, Some(env)) => Command::new("tox")
-            .arg(format!("-e {env}"))
-            .current_dir(root)
-            .status(),
-        (Runner::Tox, OutputLevel::Process, None) => Command::new("tox").current_dir(root).status(),
-        (Runner::Tox, _, Some(env)) => Command::new("tox")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .arg(format!("-e {env}"))
-            .current_dir(root)
-            .status(),
-        (Runner::Tox, _, None) => Command::new("tox")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .current_dir(root)
-            .status(),
+
+    // build the correct command depending on arguments
+    let program = match runner {
+        Runner::Pytest => "python",
+        Runner::Tox => "tox",
+    };
+    let mut command = Command::new(program);
+
+    match runner {
+        Runner::Pytest => {
+            command
+                .arg("-B")
+                .arg("-m")
+                .arg("pytest")
+                .arg(tests_glob)
+                .arg("-x");
+            if let Some(n) = num_threads {
+                command.arg(format!("-n {n}"));
+            };
+        }
+        Runner::Tox => {
+            if let Some(env) = environment {
+                command.arg(format!("-e {env}"));
+            };
+        }
     };
 
+    match output_level {
+        OutputLevel::Process => (),
+        _ => {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+    };
+
+    let status = command.status()?;
+    // let output = match (runner, output_level, environment) {
+    //     (Runner::Pytest, OutputLevel::Process, _) => Command::new("python")
+    //         .arg("-B")
+    //         .arg("-m")
+    //         .arg("pytest")
+    //         .arg("-x")
+    //         .arg(format!("-n {}", num_threads))
+    //         .arg("--cache-clear")
+    //         .arg(tests_glob)
+    //         .current_dir(root)
+    //         .status(),
+    //     (Runner::Pytest, _, _) => Command::new("python")
+    //         .stdout(Stdio::null())
+    //         .stderr(Stdio::null())
+    //         .arg("-B")
+    //         .arg("-m")
+    //         .arg("pytest")
+    //         .arg("-x")
+    //         .arg(format!("-n {}", num_threads))
+    //         .arg("--cache-clear")
+    //         .arg(tests_glob)
+    //         .current_dir(root)
+    //         .status(),
+    //     (Runner::Tox, OutputLevel::Process, Some(env)) => Command::new("tox")
+    //         .arg(format!("-e {env}"))
+    //         .current_dir(root)
+    //         .status(),
+    //     (Runner::Tox, OutputLevel::Process, None) => Command::new("tox").current_dir(root).status(),
+    //     (Runner::Tox, _, Some(env)) => Command::new("tox")
+    //         .stdout(Stdio::null())
+    //         .stderr(Stdio::null())
+    //         .arg(format!("-e {env}"))
+    //         .current_dir(root)
+    //         .status(),
+    //     (Runner::Tox, _, None) => Command::new("tox")
+    //         .stdout(Stdio::null())
+    //         .stderr(Stdio::null())
+    //         .current_dir(root)
+    //         .status(),
+    // };
+
     mutant.remove().expect("Failed to remove the mutant!");
-    let status = output?;
 
     if status.success() {
         Ok(MutantResult::Missed)
