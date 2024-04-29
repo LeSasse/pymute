@@ -1,7 +1,6 @@
 use colored::Colorize;
 use glob::glob;
 use regex::Regex;
-use std::env;
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, File};
@@ -86,7 +85,11 @@ impl Mutant {
         lines[self.line_number - 1] =
             lines[self.line_number - 1].replace(&self.before, &self.after);
 
-        fs::write(&path_to_mutant, lines.join("\n")).expect("");
+        let last = lines.pop().unwrap();
+        lines.push(format!("{last}\n"));
+        fs::write(&path_to_mutant, lines.join("\n"))
+            .expect("Failed to write to file upon mutant insertion!");
+
         Ok(())
     }
 
@@ -100,7 +103,11 @@ impl Mutant {
         lines[self.line_number - 1] =
             lines[self.line_number - 1].replace(&self.before, &self.after);
 
-        fs::write(file_path, lines.join("\n")).expect("");
+        let last = lines.pop().unwrap();
+        lines.push(format!("{last}\n"));
+        fs::write(file_path, lines.join("\n"))
+            .expect("Failed to write to file upon mutant insertion!");
+
         Ok(())
     }
 
@@ -114,15 +121,11 @@ impl Mutant {
         // revert the insert
         lines[self.line_number - 1] = self.old_line.clone();
 
-        if env::consts::OS == "windows" {
-            let last = lines.pop().unwrap();
-            lines.push(format!("{last}\r\n"));
-            fs::write(file_path, lines.join("\r\n"));
-        } else {
-            let last = lines.pop().unwrap();
-            lines.push(format!("{last}\n"));
-            fs::write(file_path, lines.join("\n"));
-        }
+        let last = lines.pop().unwrap();
+        lines.push(format!("{last}\n"));
+        fs::write(file_path, lines.join("\n"))
+            .expect("Failed to write to file upon mutant removal!");
+
         Ok(())
     }
 }

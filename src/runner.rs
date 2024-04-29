@@ -11,7 +11,7 @@ use rayon::prelude::*;
 use std::error::Error;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
+
 use tempfile::tempdir;
 
 use colored::Colorize;
