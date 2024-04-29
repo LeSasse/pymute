@@ -193,7 +193,7 @@ fn run_mutant(
         .copy_tree(root_path, dir.path())
         .expect("Failed to copy the Python project root!");
 
-    let _ = mutant
+    mutant
         .insert_in_new_root(root_path, dir.path())
         .expect("Failed to insert mutant");
 
