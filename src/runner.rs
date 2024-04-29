@@ -166,47 +166,7 @@ fn run_mutant_inplace(
         }
     };
 
-    let status = command.status()?;
-    // let output = match (runner, output_level, environment) {
-    //     (Runner::Pytest, OutputLevel::Process, _) => Command::new("python")
-    //         .arg("-B")
-    //         .arg("-m")
-    //         .arg("pytest")
-    //         .arg("-x")
-    //         .arg(format!("-n {}", num_threads))
-    //         .arg("--cache-clear")
-    //         .arg(tests_glob)
-    //         .current_dir(root)
-    //         .status(),
-    //     (Runner::Pytest, _, _) => Command::new("python")
-    //         .stdout(Stdio::null())
-    //         .stderr(Stdio::null())
-    //         .arg("-B")
-    //         .arg("-m")
-    //         .arg("pytest")
-    //         .arg("-x")
-    //         .arg(format!("-n {}", num_threads))
-    //         .arg("--cache-clear")
-    //         .arg(tests_glob)
-    //         .current_dir(root)
-    //         .status(),
-    //     (Runner::Tox, OutputLevel::Process, Some(env)) => Command::new("tox")
-    //         .arg(format!("-e {env}"))
-    //         .current_dir(root)
-    //         .status(),
-    //     (Runner::Tox, OutputLevel::Process, None) => Command::new("tox").current_dir(root).status(),
-    //     (Runner::Tox, _, Some(env)) => Command::new("tox")
-    //         .stdout(Stdio::null())
-    //         .stderr(Stdio::null())
-    //         .arg(format!("-e {env}"))
-    //         .current_dir(root)
-    //         .status(),
-    //     (Runner::Tox, _, None) => Command::new("tox")
-    //         .stdout(Stdio::null())
-    //         .stderr(Stdio::null())
-    //         .current_dir(root)
-    //         .status(),
-    // };
+    let status = command.current_dir(root).status()?;
 
     mutant.remove().expect("Failed to remove the mutant!");
 
@@ -233,41 +193,43 @@ fn run_mutant(
         .copy_tree(root_path, dir.path())
         .expect("Failed to copy the Python project root!");
 
-    let _ = mutant.insert_in_new_root(root_path, dir.path());
+    let _ = mutant
+        .insert_in_new_root(root_path, dir.path())
+        .expect("Failed to insert mutant");
 
-    let output = match (runner, output_level, environment) {
-        (Runner::Pytest, OutputLevel::Process, _) => Command::new("pytest")
-            .arg("-x")
-            .arg(tests_glob)
-            .current_dir(&dir)
-            .status(),
-        (Runner::Pytest, _, _) => Command::new("pytest")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .arg("-x")
-            .arg(tests_glob)
-            .current_dir(&dir)
-            .status(),
-        (Runner::Tox, OutputLevel::Process, Some(env)) => Command::new("tox")
-            .arg(format!("-e {env}"))
-            .current_dir(&dir)
-            .status(),
-        (Runner::Tox, OutputLevel::Process, None) => Command::new("tox").current_dir(&dir).status(),
-        (Runner::Tox, _, Some(env)) => Command::new("tox")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .arg(format!("-e {env}"))
-            .current_dir(&dir)
-            .status(),
-        (Runner::Tox, _, None) => Command::new("tox")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .current_dir(&dir)
-            .status(),
+    // build the correct command depending on arguments
+    let program = match runner {
+        Runner::Pytest => "python",
+        Runner::Tox => "tox",
     };
-    dir.close().unwrap();
+    let mut command = Command::new(program);
 
-    let status = output?;
+    match runner {
+        Runner::Pytest => {
+            command
+                .arg("-B")
+                .arg("-m")
+                .arg("pytest")
+                .arg(tests_glob)
+                .arg("-x");
+        }
+        Runner::Tox => {
+            if let Some(env) = environment {
+                command.arg(format!("-e {env}"));
+            };
+        }
+    };
+
+    match output_level {
+        OutputLevel::Process => (),
+        _ => {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+    };
+
+    let status = command.current_dir(&dir).status()?;
+
+    dir.close().unwrap();
 
     if status.success() {
         Ok(MutantResult::Missed)

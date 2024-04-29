@@ -74,7 +74,18 @@ impl Mutant {
     /// where the potential mutant was found (i.e. it will be inserted into
     /// new_root / mutant_file_path_stripped_of_root)
     pub fn insert_in_new_root(&self, root: &Path, new_root: &Path) -> Result<(), Box<dyn Error>> {
-        let file_from_root = self.file_path.strip_prefix(root)?;
+        let abs_path_file = self
+            .file_path
+            .canonicalize()
+            .expect("Failed to resolve path to file.");
+        let abs_path_file = abs_path_file.as_path();
+
+        let abs_path_root = root
+            .canonicalize()
+            .expect("Failed to resolve path to root.");
+        let abs_path_root = abs_path_root.as_path();
+
+        let file_from_root = abs_path_file.strip_prefix(abs_path_root)?;
         let path_to_mutant = new_root.join(file_from_root);
 
         let file = File::open(&path_to_mutant)?;
