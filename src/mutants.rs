@@ -87,7 +87,7 @@ fn build_replacements(mutation_types: &[MutationType]) -> Vec<(String, String)> 
 /// glob_expression: &str compatible with the `glob` crate.
 pub fn find_mutants(
     glob_expression: &str,
-    mutation_types: &Vec<MutationType>,
+    mutation_types: &[MutationType],
 ) -> Result<Vec<Mutant>, Box<dyn Error>> {
     let mut possible_mutants = Vec::<Mutant>::new();
 
@@ -243,7 +243,7 @@ impl fmt::Display for Mutant {
 fn add_mutants_from_file(
     mutant_vec: &mut Vec<Mutant>,
     path: &PathBuf,
-    replacements: &Vec<(String, String)>,
+    replacements: &[(String, String)],
 ) -> Result<(), Box<dyn Error>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
@@ -304,7 +304,7 @@ fn remove_quotes(input: &str) -> String {
 
 fn replacement_from_line(
     line: &str,
-    replacements: &Vec<(String, String)>,
+    replacements: &[(String, String)],
 ) -> Option<(String, String)> {
     let line = remove_quotes(line);
 
