@@ -313,37 +313,37 @@ print(res) # print the result +
         fs::create_dir_all(&sub_dir1_1_1).unwrap();
 
         let script1 = sub_dir1.join("script1.py");
-        let mut script1 = File::create(&script1).unwrap();
+        let mut script1 = File::create(script1).unwrap();
 
         write!(script1, "{}", multiline_string_script_1)
             .expect("Failed to write to temporary file");
 
         // create a decoy txt file that should not be matched
         let decoy = base_path.join("script1.txt");
-        let mut decoy = File::create(&decoy).unwrap();
+        let mut decoy = File::create(decoy).unwrap();
 
         write!(decoy, "{}", multiline_string_script_1).expect("Failed to write txt file.");
 
         let script2 = sub_dir1_1.join("script2.py");
-        let mut script2 = File::create(&script2).unwrap();
+        let mut script2 = File::create(script2).unwrap();
 
         write!(script2, "{}", multiline_string_script_2)
             .expect("Failed to write to temporary file");
 
         let script3 = sub_dir1_1_1.join("script3.py");
-        let mut script3 = File::create(&script3).unwrap();
+        let mut script3 = File::create(script3).unwrap();
 
         write!(script3, "{}", multiline_string_script_3)
             .expect("Failed to write to temporary file");
 
         let test_script = sub_dir1_1_1.join("test_script.py");
-        let mut test_script = File::create(&test_script).unwrap();
+        let mut test_script = File::create(test_script).unwrap();
 
         write!(test_script, "{}", multiline_string_script_test_1)
             .expect("Failed to write to temporary file");
 
         let script_test = sub_dir1_1_1.join("script_test.py");
-        let mut script_test = File::create(&script_test).unwrap();
+        let mut script_test = File::create(script_test).unwrap();
 
         write!(script_test, "{}", multiline_string_script_test_2)
             .expect("Failed to write to temporary file");

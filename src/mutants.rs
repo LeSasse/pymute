@@ -321,7 +321,6 @@ mod tests {
     use std::{
         fs::{self, read_to_string, File},
         io::Write,
-        path::Path,
     };
     use tempfile::{tempdir, NamedTempFile};
 
@@ -383,37 +382,37 @@ print(res) # print the result +
         fs::create_dir_all(&sub_dir1_1_1).unwrap();
 
         let script1 = sub_dir1.join("script1.py");
-        let mut script1 = File::create(&script1).unwrap();
+        let mut script1 = File::create(script1).unwrap();
 
         write!(script1, "{}", multiline_string_script_1)
             .expect("Failed to write to temporary file");
 
         // create a decoy txt file that should not be matched
         let decoy = base_path.join("script1.txt");
-        let mut decoy = File::create(&decoy).unwrap();
+        let mut decoy = File::create(decoy).unwrap();
 
         write!(decoy, "{}", multiline_string_script_1).expect("Failed to write txt file.");
 
         let script2 = sub_dir1_1.join("script2.py");
-        let mut script2 = File::create(&script2).unwrap();
+        let mut script2 = File::create(script2).unwrap();
 
         write!(script2, "{}", multiline_string_script_2)
             .expect("Failed to write to temporary file");
 
         let script3 = sub_dir1_1_1.join("script3.py");
-        let mut script3 = File::create(&script3).unwrap();
+        let mut script3 = File::create(script3).unwrap();
 
         write!(script3, "{}", multiline_string_script_3)
             .expect("Failed to write to temporary file");
 
         let test_script = sub_dir1_1_1.join("test_script.py");
-        let mut test_script = File::create(&test_script).unwrap();
+        let mut test_script = File::create(test_script).unwrap();
 
         write!(test_script, "{}", multiline_string_script_test_1)
             .expect("Failed to write to temporary file");
 
         let script_test = sub_dir1_1_1.join("script_test.py");
-        let mut script_test = File::create(&script_test).unwrap();
+        let mut script_test = File::create(script_test).unwrap();
 
         write!(script_test, "{}", multiline_string_script_test_2)
             .expect("Failed to write to temporary file");
@@ -450,7 +449,7 @@ print(res) # print the result +
 
         let replacements = build_replacements(&mutation_types);
 
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert!(option.is_none(), "Expected the option to be None");
     }
 
@@ -468,7 +467,7 @@ print(res) # print the result +
 
         let replacements = build_replacements(&mutation_types);
 
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert!(option.is_none(), "Expected the option to be None");
     }
 
@@ -565,7 +564,7 @@ print(res) # print the result *
         ];
 
         let replacements = build_replacements(&mutation_types);
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         println!("{:?}", option);
         assert!(option.is_none(), "Expected the option to be None");
     }
@@ -584,19 +583,19 @@ print(res) # print the result *
         let replacements = build_replacements(&mutation_types);
 
         let line = "5 + 5";
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert_eq!(option.unwrap(), (" + ".into(), " - ".into()));
 
         let line = "5 - 5";
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert_eq!(option.unwrap(), (" - ".into(), " + ".into()));
 
         let line = "5 * 5";
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert_eq!(option.unwrap(), (" * ".into(), " / ".into()));
 
         let line = "5 / 5";
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert_eq!(option.unwrap(), (" / ".into(), " * ".into()));
     }
 
@@ -613,11 +612,11 @@ print(res) # print the result *
 
         let replacements = build_replacements(&mutation_types);
         let line = "True and False";
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert_eq!(option.unwrap(), (" and ".into(), " or ".into()));
 
         let line = "True or False";
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert_eq!(option.unwrap(), (" or ".into(), " and ".into()));
     }
 
@@ -635,19 +634,19 @@ print(res) # print the result *
         let replacements = build_replacements(&mutation_types);
 
         let line = "5 == 5";
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert_eq!(option.unwrap(), ("==".into(), "!=".into()));
 
         let line = "5 != 5";
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert_eq!(option.unwrap(), ("!=".into(), "==".into()));
 
         let line = "5 > 5";
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert_eq!(option.unwrap(), (" > ".into(), " < ".into()));
 
         let line = "5 < 5";
-        let option = mutants::replacement_from_line(&line, &replacements);
+        let option = mutants::replacement_from_line(line, &replacements);
         assert_eq!(option.unwrap(), (" < ".into(), " > ".into()));
     }
 
@@ -660,7 +659,7 @@ print(res) # print the result *
         let base_path = temp_dir.path();
         let file_path_original = base_path.join("script.py");
 
-        let temp_dir_copy = tempdir().unwrap();
+        let _temp_dir_copy = tempdir().unwrap();
         let base_path_copy = temp_dir.path();
         let file_path_copy = base_path_copy.join("script.py");
 
@@ -689,17 +688,19 @@ print(res) # print the result *
         let desired_result = String::from("def add(a, b):\n    return a + b\n");
         assert_eq!(result, desired_result);
 
-        mutant.insert_in_new_root(&base_path, &base_path_copy);
+        mutant
+            .insert_in_new_root(base_path, base_path_copy)
+            .unwrap();
         let result = read_to_string(file_path_copy).unwrap();
         let desired_result = String::from("def add(a, b):\n    return a - b\n");
         assert_eq!(result, desired_result);
 
         let file_name_str = file_path_original.clone().into_os_string();
-        let file_name_str = file_name_str
+        let _file_name_str = file_name_str
             .to_str()
             .expect("Failed to convert file path to string!")
             .yellow();
 
-        let display = format!("{mutant}");
+        let _display = format!("{mutant}");
     }
 }
