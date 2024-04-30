@@ -1,7 +1,7 @@
 use pymute::mutants::{find_mutants, MutationType};
 use pymute::runner;
 
-use rand::{seq::IteratorRandom, thread_rng, SeedableRng};
+use rand::{seq::IteratorRandom, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use clap::{Parser, ValueEnum};
@@ -146,34 +146,32 @@ fn main() {
             &args.environment,
             &args.num_threads,
         )
+    } else if let Some(n) = args.num_threads {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(n)
+            .build_global()
+            .expect("Failed to set the number of threads using rayon.");
+        runner::run_mutants(
+            &mutants,
+            &args.root,
+            &args.tests,
+            &output_level,
+            &runner,
+            &args.environment,
+        );
     } else {
-        if let Some(n) = args.num_threads {
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(n)
-                .build_global()
-                .expect("Failed to set the number of threads using rayon.");
-            runner::run_mutants(
-                &mutants,
-                &args.root,
-                &args.tests,
-                &output_level,
-                &runner,
-                &args.environment,
-            );
-        } else {
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(1)
-                .build_global()
-                .expect("Failed to set the number of threads using rayon.");
-            runner::run_mutants(
-                &mutants,
-                &args.root,
-                &args.tests,
-                &output_level,
-                &runner,
-                &args.environment,
-            );
-        }
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build_global()
+            .expect("Failed to set the number of threads using rayon.");
+        runner::run_mutants(
+            &mutants,
+            &args.root,
+            &args.tests,
+            &output_level,
+            &runner,
+            &args.environment,
+        );
     }
 }
 

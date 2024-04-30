@@ -25,7 +25,7 @@ pub enum MutationType {
     Numbers,
 }
 
-fn build_replacements(mutation_types: &Vec<MutationType>) -> Vec<(String, String)> {
+fn build_replacements(mutation_types: &[MutationType]) -> Vec<(String, String)> {
     let mut replacements = Vec::new();
 
     let mut numbers = Vec::new();
@@ -91,7 +91,7 @@ pub fn find_mutants(
 ) -> Result<Vec<Mutant>, Box<dyn Error>> {
     let mut possible_mutants = Vec::<Mutant>::new();
 
-    let replacements = build_replacements(&mutation_types);
+    let replacements = build_replacements(mutation_types);
 
     for entry in glob(glob_expression).expect("Failed to read glob pattern") {
         match entry {
