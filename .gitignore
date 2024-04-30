@@ -1,3 +1,5 @@
+datalad
+testenv
 .ruff*
 .pytest*
 **/__pycache__

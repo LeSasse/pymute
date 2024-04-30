@@ -1,3 +1,4 @@
+use clap::ValueEnum;
 use colored::Colorize;
 use glob::glob;
 use regex::Regex;
@@ -7,6 +8,75 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
+/// A semantic grouping of different types of possible mutations.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum MutationType {
+    /// Mutate mathematical operators (e.g. "*,+,-,/")
+    MathOps,
+    /// Mutate conjunctions in boolean expressions (e.g. "and/or").
+    Conjunctions,
+    /// Mutate booleans (e.g. "True/False").
+    Booleans,
+    /// Mutate control flow statements (e.g. if statements).
+    ControlFlow,
+    /// Mutate comparison operators (e.g. "<,>,==,!=").
+    CompOps,
+    /// Mutate numbers (e.g. off-by-one errors)
+    Numbers,
+}
+
+fn build_replacements(mutation_types: &Vec<MutationType>) -> Vec<(String, String)> {
+    let mut replacements = Vec::new();
+
+    let mut numbers = Vec::new();
+    for n in 0..10 {
+        numbers.push((n.to_string(), (n + 1).to_string()));
+    }
+
+    mutation_types
+        .iter()
+        .for_each(|mutation_type| match mutation_type {
+            MutationType::MathOps => {
+                replacements.append(&mut vec![
+                    (" + ".into(), " - ".into()),
+                    (" - ".into(), " + ".into()),
+                    (" * ".into(), " / ".into()),
+                    (" / ".into(), " * ".into()),
+                ]);
+            }
+            MutationType::Conjunctions => {
+                replacements.append(&mut vec![
+                    (" and ".into(), " or ".into()),
+                    (" or ".into(), " and ".into()),
+                ]);
+            }
+            MutationType::Booleans => {
+                replacements.append(&mut vec![
+                    (" True ".into(), " False ".into()),
+                    (" False ".into(), " True ".into()),
+                ]);
+            }
+            MutationType::ControlFlow => {
+                replacements.append(&mut vec![
+                    (" else: ".into(), " elif False: ".into()),
+                    (" if not ".into(), " if ".into()),
+                    (" if ".into(), " if not ".into()),
+                ]);
+            }
+            MutationType::CompOps => {
+                replacements.append(&mut vec![
+                    (" > ".into(), " < ".into()),
+                    (" < ".into(), " > ".into()),
+                    ("==".into(), "!=".into()),
+                    ("!=".into(), "==".into()),
+                ]);
+            }
+            MutationType::Numbers => replacements.append(&mut numbers),
+        });
+
+    replacements
+}
+
 /// Find potential python mutants from files that match the glob expression.
 ///
 /// It will ignore any files that start with test_* and that end with *_test.py
@@ -15,8 +85,13 @@ use std::path::{Path, PathBuf};
 /// Parameters
 /// ----------
 /// glob_expression: &str compatible with the `glob` crate.
-pub fn find_mutants(glob_expression: &str) -> Result<Vec<Mutant>, Box<dyn Error>> {
+pub fn find_mutants(
+    glob_expression: &str,
+    mutation_types: &Vec<MutationType>,
+) -> Result<Vec<Mutant>, Box<dyn Error>> {
     let mut possible_mutants = Vec::<Mutant>::new();
+
+    let replacements = build_replacements(&mutation_types);
 
     for entry in glob(glob_expression).expect("Failed to read glob pattern") {
         match entry {
@@ -35,7 +110,7 @@ pub fn find_mutants(glob_expression: &str) -> Result<Vec<Mutant>, Box<dyn Error>
                 if file_name.ends_with("_test.py") {
                     continue;
                 }
-                let _ = add_mutants_from_file(&mut possible_mutants, &path);
+                let _ = add_mutants_from_file(&mut possible_mutants, &path, &replacements);
             }
             Err(_e) => {}
         }
@@ -83,6 +158,7 @@ impl Mutant {
         let abs_path_root = root
             .canonicalize()
             .expect("Failed to resolve path to root.");
+
         let abs_path_root = abs_path_root.as_path();
 
         let file_from_root = abs_path_file.strip_prefix(abs_path_root)?;
@@ -167,6 +243,7 @@ impl fmt::Display for Mutant {
 fn add_mutants_from_file(
     mutant_vec: &mut Vec<Mutant>,
     path: &PathBuf,
+    replacements: &Vec<(String, String)>,
 ) -> Result<(), Box<dyn Error>> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
@@ -201,7 +278,7 @@ fn add_mutants_from_file(
 
         // also only consider stuff on left of comment
         let line_split = line.split('#').collect::<Vec<_>>()[0];
-        let replacement = replacement_from_line(line_split);
+        let replacement = replacement_from_line(line_split, replacements);
         match replacement {
             Some((before, after)) => {
                 let mutant = Mutant {
@@ -225,40 +302,16 @@ fn remove_quotes(input: &str) -> String {
     re.replace_all(input, "").to_string()
 }
 
-fn replacement_from_line(line: &str) -> Option<(String, String)> {
+fn replacement_from_line(
+    line: &str,
+    replacements: &Vec<(String, String)>,
+) -> Option<(String, String)> {
     let line = remove_quotes(line);
-    let replacements = vec![
-        // mathematical operators
-        (" + ", " - "),
-        (" - ", " + "),
-        (" * ", " / "),
-        (" / ", " * "),
-        // conjunctions
-        (" and ", " or "),
-        (" or ", " and "),
-        // booleans
-        (" True ", " False "),
-        (" False ", " True "),
-        // control flow
-        (" else: ", " elif False: "),
-        (" if not ", " if "),
-        (" if ", " if not "),
-        // comparisons
-        (" > ", " < "),
-        (" < ", " > "),
-        ("==", "!="),
-        ("!=", "=="),
-        // numpy/pandas shenanigans
-        ("std(", "mean("),
-        ("mean(", "std("),
-        // other built-ins
-        ("range(", "list("),
-    ];
 
     replacements
         .iter()
         .find(|(from, _)| line.contains(from))
-        .map(|&(from, to)| (from.into(), to.into()))
+        .map(|(from, to)| (from.into(), to.into()))
 }
 
 #[cfg(test)]

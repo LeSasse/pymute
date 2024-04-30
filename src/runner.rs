@@ -33,8 +33,6 @@ pub fn run_mutants(
     runner: &Runner,
     environment: &Option<String>,
 ) {
-    //let new_line = "\n";
-
     let bar = ProgressBar::new(mutants.len().try_into().unwrap());
     bar.set_style(
         ProgressStyle::with_template(
@@ -76,13 +74,16 @@ pub fn run_mutants_inplace(
 ) {
     let bar = ProgressBar::new(mutants.len().try_into().unwrap());
     bar.set_style(
-        ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7}")
-            .unwrap(),
+        ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        )
+        .unwrap(),
     );
     mutants
         .iter()
         .progress_with(bar.clone())
         .for_each(|mutant| {
+            bar.set_message(format!("[{}]: {mutant}\r", "RUNNING".yellow()));
             let result = run_mutant_inplace(
                 mutant,
                 root,

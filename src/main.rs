@@ -1,6 +1,8 @@
-use pymute::mutants::find_mutants;
+use pymute::mutants::{find_mutants, MutationType};
 use pymute::runner;
-use rand::{seq::IteratorRandom, thread_rng};
+
+use rand::{seq::IteratorRandom, thread_rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
 use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
@@ -53,17 +55,34 @@ pub struct Cli {
     environment: Option<String>,
 
     /// Maximum number of mutants to be run. If set, will choose a random subset
-    /// of n mutants.
+    /// of n mutants. Consider setting the `--seed` option
     #[arg(long)]
     max_mutants: Option<usize>,
 
+    /// Mutation types.
+    #[arg(long)]
+    #[arg(value_enum)]
+    #[arg(default_values_t = [
+	MutationType::MathOps,
+	MutationType::Conjunctions,
+	MutationType::Booleans,
+	MutationType::ControlFlow,
+	MutationType::CompOps
+    ], value_delimiter=',')]
+    mutation_types: Vec<MutationType>,
+
     /// Whether to run inplace.
     #[arg(short, long)]
-    pub inplace: bool,
+    inplace: bool,
 
     /// List mutants and exit.
     #[arg(short, long)]
-    pub list: bool,
+    list: bool,
+
+    /// Seed for random number generator if max_mutants is set.
+    #[arg(short, long)]
+    #[arg(default_value = "42")]
+    seed: u64,
 }
 
 fn main() {
@@ -83,12 +102,14 @@ fn main() {
 
     let mutants = match args.max_mutants {
         Some(max) => {
-            let mut rng = thread_rng();
+            let mut rng = ChaCha8Rng::seed_from_u64(args.seed);
+
             find_mutants(
                 modules
                     .into_os_string()
                     .to_str()
                     .expect("Invalid Glob Expression?"),
+                &args.mutation_types,
             )
             .expect("Failed to find mutants!")
             .into_iter()
@@ -101,6 +122,7 @@ fn main() {
                 .into_os_string()
                 .to_str()
                 .expect("Invalid Glob Expression?"),
+            &args.mutation_types,
         )
         .expect("Failed to find mutants!"),
     };
@@ -130,15 +152,28 @@ fn main() {
                 .num_threads(n)
                 .build_global()
                 .expect("Failed to set the number of threads using rayon.");
+            runner::run_mutants(
+                &mutants,
+                &args.root,
+                &args.tests,
+                &output_level,
+                &runner,
+                &args.environment,
+            );
+        } else {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(1)
+                .build_global()
+                .expect("Failed to set the number of threads using rayon.");
+            runner::run_mutants(
+                &mutants,
+                &args.root,
+                &args.tests,
+                &output_level,
+                &runner,
+                &args.environment,
+            );
         }
-        runner::run_mutants(
-            &mutants,
-            &args.root,
-            &args.tests,
-            &output_level,
-            &runner,
-            &args.environment,
-        );
     }
 }
 
