@@ -5,7 +5,7 @@ version = "0.1.0"
 edition = "2021"
 license = "Unlicense"
 readme = "README.md"
-
+description = "Pymute: A Mutation Testing Tool for Python/Pytest written in Rust"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
