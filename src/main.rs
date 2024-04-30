@@ -4,7 +4,7 @@ use pymute::runner;
 use rand::{seq::IteratorRandom, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use std::path::PathBuf;
 
 /// Pymute: A Mutation Testing Tool for Python/Pytest written in Rust.
@@ -40,14 +40,14 @@ pub struct Cli {
     /// Output level of the program
     #[arg(short, long)]
     #[arg(value_enum)]
-    #[arg(default_value_t = OutputLevelCli::Missed)]
-    output_level: OutputLevelCli,
+    #[arg(default_value_t = runner::OutputLevel::Missed)]
+    output_level: runner::OutputLevel,
 
     /// Test runner to use.
     #[arg(short, long)]
     #[arg(value_enum)]
-    #[arg(default_value_t = RunnerCli::Pytest)]
-    runner: RunnerCli,
+    #[arg(default_value_t = runner::Runner::Pytest)]
+    runner: runner::Runner,
 
     /// Tox environment to use. Ignored if pytest runner is used.
     #[arg(short, long)]
@@ -90,17 +90,6 @@ fn main() {
     let args = Cli::parse();
     let modules: PathBuf = [&args.root, &args.modules.into()].iter().collect();
 
-    let output_level = match args.output_level {
-        OutputLevelCli::Missed => runner::OutputLevel::Missed,
-        OutputLevelCli::Caught => runner::OutputLevel::Caught,
-        OutputLevelCli::Process => runner::OutputLevel::Process,
-    };
-
-    let runner = match args.runner {
-        RunnerCli::Pytest => runner::Runner::Pytest,
-        RunnerCli::Tox => runner::Runner::Tox,
-    };
-
     let mutants = match args.max_mutants {
         Some(max) => {
             let mut rng = ChaCha8Rng::seed_from_u64(args.seed);
@@ -142,8 +131,8 @@ fn main() {
             &mutants,
             &args.root,
             &args.tests,
-            &output_level,
-            &runner,
+            &args.output_level,
+            &args.runner,
             &args.environment,
             &args.num_threads,
         )
@@ -156,8 +145,8 @@ fn main() {
             &mutants,
             &args.root,
             &args.tests,
-            &output_level,
-            &runner,
+            &args.output_level,
+            &args.runner,
             &args.environment,
         );
     } else {
@@ -169,29 +158,9 @@ fn main() {
             &mutants,
             &args.root,
             &args.tests,
-            &output_level,
-            &runner,
+            &args.output_level,
+            &args.runner,
             &args.environment,
         );
     }
-}
-
-// Define outout level enum.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum OutputLevelCli {
-    /// missed: print out only mutants that were missed by the tests.
-    Missed,
-    /// caught: print out also mutants that were caught by the tests.
-    Caught,
-    /// process: print out also output from the individual processes.
-    Process,
-}
-
-// Define the test runner.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub enum RunnerCli {
-    /// Pytest
-    Pytest,
-    /// Tox
-    Tox,
 }

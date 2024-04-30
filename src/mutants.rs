@@ -33,6 +33,8 @@ pub enum MutationType {
 /// Parameters
 /// ----------
 /// glob_expression: &str compatible with the `glob` crate.
+/// mutation_types: Collection of MutationType. Each of the mutation types specified
+/// here will be used.
 pub fn find_mutants(
     glob_expression: &str,
     mutation_types: &[MutationType],
@@ -128,6 +130,10 @@ impl Mutant {
         Ok(())
     }
 
+    /// Insert the mutant in place.
+    ///
+    /// This will attempt to insert the mutant in the related file in the original
+    /// python project (i.e. in place/where the mutant was found).
     pub fn insert(&self) -> Result<(), Box<dyn Error>> {
         let file_path = self.file_path.as_path();
         let file = File::open(file_path)?;
@@ -146,6 +152,11 @@ impl Mutant {
         Ok(())
     }
 
+    /// Remove the mutant.
+    ///
+    /// Remove a mutant from the original file after it has been inserted in place.
+    /// This method is not well tested and in general the temporary directory
+    /// workflow should be preferred over in place operations at the moment.
     pub fn remove(&self) -> Result<(), Box<dyn Error>> {
         let file_path = self.file_path.as_path();
         let file = File::open(file_path)?;
@@ -188,6 +199,9 @@ impl fmt::Display for Mutant {
     }
 }
 
+/// Search for potential mutants in a file given some replacements.
+/// The replacement tuples in the Vec give the (before, after) string
+/// values i.e. before can be replaced by after.
 fn add_mutants_from_file(
     mutant_vec: &mut Vec<Mutant>,
     path: &PathBuf,
@@ -245,11 +259,15 @@ fn add_mutants_from_file(
     Ok(())
 }
 
+/// Remove quotes so that python strings are ignored.
 fn remove_quotes(input: &str) -> String {
     let re = Regex::new(r#"'[^']*'|"[^"]*""#).unwrap();
     re.replace_all(input, "").to_string()
 }
 
+/// Find a before/after replacement tuple in `line`. Possible tuples are
+/// specified in `replacements`.
+///If no possible replacement is found, it returns None.
 fn replacement_from_line(
     line: &str,
     replacements: &[(String, String)],
@@ -262,6 +280,8 @@ fn replacement_from_line(
         .map(|(from, to)| (from.into(), to.into()))
 }
 
+/// Build a Vec of before/after replacement tuples from the specified types of
+/// mutations.
 fn build_replacements(mutation_types: &[MutationType]) -> Vec<(String, String)> {
     let mut replacements = Vec::new();
 

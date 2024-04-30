@@ -6,6 +6,7 @@ use indicatif::{
     self, style::ProgressStyle, ParallelProgressIterator, ProgressBar, ProgressIterator,
 };
 
+use clap::ValueEnum;
 use rayon::prelude::*;
 
 use std::error::Error;
@@ -16,6 +17,26 @@ use tempfile::tempdir;
 
 use colored::Colorize;
 
+/// Define the runner to use to run the test suite.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum Runner {
+    /// Run with Pytest.
+    Pytest,
+    /// Run with Tox.
+    Tox,
+}
+
+/// Define the output level when running the tests for mutants.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum OutputLevel {
+    /// missed: print out only mutants that were missed by the tests.
+    Missed,
+    /// caught: print out also mutants that were caught by the tests.
+    Caught,
+    /// process: print out also output from the individual processes.
+    Process,
+}
+
 /// Run tests for all mutants each in their own temporary directory.
 ///
 /// Run in parallel using rayon.
@@ -24,7 +45,8 @@ use colored::Colorize;
 /// ----------
 /// mutants: Vec of Mutants for which to run tests in individual sub-processes.
 /// root: PathBuf to the root of the original python project.
-/// tests: Path to the tests to run via tests as string.
+/// tests: Path to the tests to run via tests as string. Only releveant if the runner
+/// is
 pub fn run_mutants(
     mutants: &Vec<Mutant>,
     root: &PathBuf,
@@ -107,20 +129,6 @@ pub fn run_mutants_inplace(
                 }
             }
         })
-}
-
-pub enum OutputLevel {
-    /// missed: print out only mutants that were missed by the tests.
-    Missed,
-    /// caught: print out also mutants that were caught by the tests.
-    Caught,
-    /// process: print out also output from the individual processes.
-    Process,
-}
-
-pub enum Runner {
-    Pytest,
-    Tox,
 }
 
 fn run_mutant_inplace(
