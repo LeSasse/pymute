@@ -8,6 +8,14 @@ readme = "README.md"
 description = "Pymute: A Mutation Testing Tool for Python/Pytest written in Rust"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+path = "src/lib.rs"
+
+# Binaries
+[[bin]]
+name = "pymute"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4.5.4", features = ["cargo", "derive"]}
 colored = "2.1.0"

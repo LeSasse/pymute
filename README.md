@@ -1,7 +1,7 @@
 # Pymute: A Mutation Testing Tool for Python/Pytest written in Rust
 
 Pymute is inspired by my experience of using [cargo mutants](https://mutants.rs/).
-I used it in a rust project really enjoyed it, so I had to search for something
+I used it in a rust project, really enjoyed it, so I had to search for something
 similar for python/pytest projects. Quickly found [mut.py](https://github.com/mutpy/mutpy)
 and [the pynguin fork of mut.py](https://github.com/se2p/mutpy-pynguin) among
 some other solutions, but none of them seemed quite stable across different python
@@ -19,7 +19,9 @@ To install `pymute` make sure you have rust and cargo installed on your system
 (check `cargo --version`). You can follow instructions here to install rust and
 its toolchain: https://www.rust-lang.org/tools/install
 
-You can install `pymute` via cargo from GitHub as:
+You can install `pymute` via cargo crom [crates.io](https://crates.io/crates/pymute).
+
+Alternatively, you can install `pymute` via cargo from GitHub as:
 ```
 cargo install --git https://github.com/LeSasse/pymute.git
 ```
