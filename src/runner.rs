@@ -30,6 +30,7 @@
 //!
 //! let root = PathBuf::from("path/to/python/project");
 //! let mutation_types = &[MutationType::MathOps, MutationType::Booleans];
+//! let glob_pattern = "**/*.py";
 //! let mutants = find_mutants(glob_pattern, mutation_types).expect("Error finding mutants");
 //! let tests = "tests/".to_string();
 //! let runner = Runner::Pytest;

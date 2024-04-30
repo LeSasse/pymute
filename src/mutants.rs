@@ -31,7 +31,7 @@
 //!
 //! To use this module to find and apply mutations in a temporary directory (preferred way):
 //!
-//! ```rust
+//! ```run
 //! use pymute::mutants::{MutationType, find_mutants};
 //! use cp_r::CopyOptions;
 //! use std::path::PathBuf;
@@ -45,15 +45,15 @@
 //! for mutant in mutants {
 //!     let dir = tempdir().expect("Failed to create temporary directory!");
 //!     mutant.insert_in_new_root(&project_root, dir.path()).expect("Error inserting mutant");
-//!     mutant.remove().expect("Error removing mutant")
+//!     mutant.remove().expect("Error removing mutant");
 //!     dir.close().unwrap();
 //! }
 //! ```
 //!
 //! To use this module to find and apply mutations in place (removal is not well-tested and reliable as of yet):
 //!
-//! ```rust
-//! use mutant_generator::MutationType;
+//! ```run
+//! use pymute::mutants::{find_mutants, MutationType};
 //!
 //! let glob_pattern = "**/*.py";
 //! let mutation_types = &[MutationType::MathOps, MutationType::Booleans];
