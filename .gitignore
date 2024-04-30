@@ -1,3 +1,4 @@
+mutants.out*
 datalad
 testenv
 .ruff*

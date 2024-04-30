@@ -67,7 +67,8 @@ pub struct Cli {
 	MutationType::Conjunctions,
 	MutationType::Booleans,
 	MutationType::ControlFlow,
-	MutationType::CompOps
+	MutationType::CompOps,
+	MutationType::Numbers,
     ], value_delimiter=',')]
     mutation_types: Vec<MutationType>,
 

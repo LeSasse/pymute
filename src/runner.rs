@@ -246,8 +246,8 @@ enum MutantResult {
 
 #[cfg(test)]
 mod tests {
-    use crate::mutants;
-    use crate::pytest;
+    use crate::mutants::{self, MutationType};
+    use crate::runner;
     use std::{
         fs::{self, File},
         io::Write,
@@ -350,10 +350,27 @@ print(res) # print the result +
 
         let glob_expr = base_path.to_str().unwrap();
         let glob_expr = format!("{glob_expr}/**/*.py");
-        let mutants_vec = mutants::find_mutants(&glob_expr).unwrap();
+
+        let mutation_types = vec![
+            MutationType::MathOps,
+            MutationType::Conjunctions,
+            MutationType::Booleans,
+            MutationType::ControlFlow,
+            MutationType::CompOps,
+            MutationType::Numbers,
+        ];
+        let mutants_vec = mutants::find_mutants(&glob_expr, &mutation_types).unwrap();
 
         assert_eq!(mutants_vec.len(), 7);
-        pytest::pytest_mutants(&mutants_vec, &PathBuf::from(base_path), &".".into());
+
+        runner::run_mutants(
+            &mutants_vec,
+            &PathBuf::from(base_path),
+            &".".into(),
+            &runner::OutputLevel::Missed,
+            &runner::Runner::Pytest,
+            &None,
+        );
 
         temp_dir.close().unwrap();
     }

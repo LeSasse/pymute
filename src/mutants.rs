@@ -25,58 +25,6 @@ pub enum MutationType {
     Numbers,
 }
 
-fn build_replacements(mutation_types: &[MutationType]) -> Vec<(String, String)> {
-    let mut replacements = Vec::new();
-
-    let mut numbers = Vec::new();
-    for n in 0..10 {
-        numbers.push((n.to_string(), (n + 1).to_string()));
-    }
-
-    mutation_types
-        .iter()
-        .for_each(|mutation_type| match mutation_type {
-            MutationType::MathOps => {
-                replacements.append(&mut vec![
-                    (" + ".into(), " - ".into()),
-                    (" - ".into(), " + ".into()),
-                    (" * ".into(), " / ".into()),
-                    (" / ".into(), " * ".into()),
-                ]);
-            }
-            MutationType::Conjunctions => {
-                replacements.append(&mut vec![
-                    (" and ".into(), " or ".into()),
-                    (" or ".into(), " and ".into()),
-                ]);
-            }
-            MutationType::Booleans => {
-                replacements.append(&mut vec![
-                    (" True ".into(), " False ".into()),
-                    (" False ".into(), " True ".into()),
-                ]);
-            }
-            MutationType::ControlFlow => {
-                replacements.append(&mut vec![
-                    (" else: ".into(), " elif False: ".into()),
-                    (" if not ".into(), " if ".into()),
-                    (" if ".into(), " if not ".into()),
-                ]);
-            }
-            MutationType::CompOps => {
-                replacements.append(&mut vec![
-                    (" > ".into(), " < ".into()),
-                    (" < ".into(), " > ".into()),
-                    ("==".into(), "!=".into()),
-                    ("!=".into(), "==".into()),
-                ]);
-            }
-            MutationType::Numbers => replacements.append(&mut numbers),
-        });
-
-    replacements
-}
-
 /// Find potential python mutants from files that match the glob expression.
 ///
 /// It will ignore any files that start with test_* and that end with *_test.py
@@ -314,12 +262,66 @@ fn replacement_from_line(
         .map(|(from, to)| (from.into(), to.into()))
 }
 
+fn build_replacements(mutation_types: &[MutationType]) -> Vec<(String, String)> {
+    let mut replacements = Vec::new();
+
+    let mut numbers = Vec::new();
+    for n in 0..10 {
+        numbers.push((n.to_string(), (n + 1).to_string()));
+    }
+
+    mutation_types
+        .iter()
+        .for_each(|mutation_type| match mutation_type {
+            MutationType::MathOps => {
+                replacements.append(&mut vec![
+                    (" + ".into(), " - ".into()),
+                    (" - ".into(), " + ".into()),
+                    (" * ".into(), " / ".into()),
+                    (" / ".into(), " * ".into()),
+                ]);
+            }
+            MutationType::Conjunctions => {
+                replacements.append(&mut vec![
+                    (" and ".into(), " or ".into()),
+                    (" or ".into(), " and ".into()),
+                ]);
+            }
+            MutationType::Booleans => {
+                replacements.append(&mut vec![
+                    (" True ".into(), " False ".into()),
+                    (" False ".into(), " True ".into()),
+                ]);
+            }
+            MutationType::ControlFlow => {
+                replacements.append(&mut vec![
+                    (" else: ".into(), " elif False: ".into()),
+                    (" if not ".into(), " if ".into()),
+                    (" if ".into(), " if not ".into()),
+                ]);
+            }
+            MutationType::CompOps => {
+                replacements.append(&mut vec![
+                    (" > ".into(), " < ".into()),
+                    (" < ".into(), " > ".into()),
+                    ("==".into(), "!=".into()),
+                    ("!=".into(), "==".into()),
+                ]);
+            }
+            MutationType::Numbers => replacements.append(&mut numbers),
+        });
+
+    replacements
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::mutants;
+    use crate::mutants::{self, build_replacements, MutationType};
+    use colored::Colorize;
     use std::{
-        fs::{self, File},
+        fs::{self, read_to_string, File},
         io::Write,
+        path::Path,
     };
     use tempfile::{tempdir, NamedTempFile};
 
@@ -418,7 +420,16 @@ print(res) # print the result +
 
         let glob_expr = base_path.to_str().unwrap();
         let glob_expr = format!("{glob_expr}/**/*.py");
-        let mutants_vec = mutants::find_mutants(&glob_expr).unwrap();
+
+        let mutation_types = vec![
+            MutationType::MathOps,
+            MutationType::Conjunctions,
+            MutationType::Booleans,
+            MutationType::ControlFlow,
+            MutationType::CompOps,
+            MutationType::Numbers,
+        ];
+        let mutants_vec = mutants::find_mutants(&glob_expr, &mutation_types).unwrap();
 
         assert_eq!(mutants_vec.len(), 7);
 
@@ -428,14 +439,36 @@ print(res) # print the result +
     #[test]
     fn test_replacement_from_line_with_single_quotes() {
         let line = r#"print('a + b')"#;
-        let option = mutants::replacement_from_line(&line);
+        let mutation_types = vec![
+            MutationType::MathOps,
+            MutationType::Conjunctions,
+            MutationType::Booleans,
+            MutationType::ControlFlow,
+            MutationType::CompOps,
+            MutationType::Numbers,
+        ];
+
+        let replacements = build_replacements(&mutation_types);
+
+        let option = mutants::replacement_from_line(&line, &replacements);
         assert!(option.is_none(), "Expected the option to be None");
     }
 
     #[test]
     fn test_replacement_from_line_with_double_quotes() {
         let line = r#"print("a + b")"#;
-        let option = mutants::replacement_from_line(&line);
+        let mutation_types = vec![
+            MutationType::MathOps,
+            MutationType::Conjunctions,
+            MutationType::Booleans,
+            MutationType::ControlFlow,
+            MutationType::CompOps,
+            MutationType::Numbers,
+        ];
+
+        let replacements = build_replacements(&mutation_types);
+
+        let option = mutants::replacement_from_line(&line, &replacements);
         assert!(option.is_none(), "Expected the option to be None");
     }
 
@@ -447,14 +480,28 @@ print(res) # print the result +
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{}", multiline_string).expect("Failed to write to temporary file");
 
+        let mutation_types = vec![
+            MutationType::MathOps,
+            MutationType::Conjunctions,
+            MutationType::Booleans,
+            MutationType::ControlFlow,
+            MutationType::CompOps,
+            MutationType::Numbers,
+        ];
+
+        let replacements = build_replacements(&mutation_types);
+
         let mut possible_mutants = Vec::<mutants::Mutant>::new();
-        let _ =
-            mutants::add_mutants_from_file(&mut possible_mutants, &temp_file.path().to_path_buf());
+        let _ = mutants::add_mutants_from_file(
+            &mut possible_mutants,
+            &temp_file.path().to_path_buf(),
+            &replacements,
+        );
 
         assert_eq!(possible_mutants.len(), 1);
         assert_eq!(possible_mutants[0].line_number, 2);
-        assert_eq!(possible_mutants[0].before, String::from("+"));
-        assert_eq!(possible_mutants[0].after, String::from("-"));
+        assert_eq!(possible_mutants[0].before, String::from(" + "));
+        assert_eq!(possible_mutants[0].after, String::from(" - "));
     }
 
     #[test]
@@ -473,79 +520,186 @@ print(res) # print the result *
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{}", multiline_string).expect("Failed to write to temporary file");
 
+        let mutation_types = vec![
+            MutationType::MathOps,
+            MutationType::Conjunctions,
+            MutationType::Booleans,
+            MutationType::ControlFlow,
+            MutationType::CompOps,
+            MutationType::Numbers,
+        ];
+
+        let replacements = build_replacements(&mutation_types);
         let mut possible_mutants = Vec::<mutants::Mutant>::new();
-        let _ =
-            mutants::add_mutants_from_file(&mut possible_mutants, &temp_file.path().to_path_buf());
+        let _ = mutants::add_mutants_from_file(
+            &mut possible_mutants,
+            &temp_file.path().to_path_buf(),
+            &replacements,
+        );
 
         assert_eq!(possible_mutants.len(), 3);
 
         assert_eq!(possible_mutants[0].line_number, 2);
-        assert_eq!(possible_mutants[0].before, String::from("+"));
-        assert_eq!(possible_mutants[0].after, String::from("-"));
+        assert_eq!(possible_mutants[0].before, String::from(" + "));
+        assert_eq!(possible_mutants[0].after, String::from(" - "));
 
         assert_eq!(possible_mutants[1].line_number, 6);
-        assert_eq!(possible_mutants[1].before, String::from("-"));
-        assert_eq!(possible_mutants[1].after, String::from("+"));
+        assert_eq!(possible_mutants[1].before, String::from(" - "));
+        assert_eq!(possible_mutants[1].after, String::from(" + "));
 
         assert_eq!(possible_mutants[2].line_number, 8);
-        assert_eq!(possible_mutants[2].before, String::from("*"));
-        assert_eq!(possible_mutants[2].after, String::from("/"));
+        assert_eq!(possible_mutants[2].before, String::from(" * "));
+        assert_eq!(possible_mutants[2].after, String::from(" / "));
     }
 
     #[test]
     fn test_replacement_from_line_none() {
         let line = "print('Hello World')";
-        let option = mutants::replacement_from_line(&line);
+        let mutation_types = vec![
+            MutationType::MathOps,
+            MutationType::Conjunctions,
+            MutationType::Booleans,
+            MutationType::ControlFlow,
+            MutationType::CompOps,
+            MutationType::Numbers,
+        ];
+
+        let replacements = build_replacements(&mutation_types);
+        let option = mutants::replacement_from_line(&line, &replacements);
         println!("{:?}", option);
         assert!(option.is_none(), "Expected the option to be None");
     }
 
     #[test]
     fn test_replacement_from_line_math_operators() {
+        let mutation_types = vec![
+            MutationType::MathOps,
+            MutationType::Conjunctions,
+            MutationType::Booleans,
+            MutationType::ControlFlow,
+            MutationType::CompOps,
+            MutationType::Numbers,
+        ];
+
+        let replacements = build_replacements(&mutation_types);
+
         let line = "5 + 5";
-        let option = mutants::replacement_from_line(&line);
-        assert_eq!(option.unwrap(), ("+".into(), "-".into()));
+        let option = mutants::replacement_from_line(&line, &replacements);
+        assert_eq!(option.unwrap(), (" + ".into(), " - ".into()));
 
         let line = "5 - 5";
-        let option = mutants::replacement_from_line(&line);
-        assert_eq!(option.unwrap(), ("-".into(), "+".into()));
+        let option = mutants::replacement_from_line(&line, &replacements);
+        assert_eq!(option.unwrap(), (" - ".into(), " + ".into()));
 
         let line = "5 * 5";
-        let option = mutants::replacement_from_line(&line);
-        assert_eq!(option.unwrap(), ("*".into(), "/".into()));
+        let option = mutants::replacement_from_line(&line, &replacements);
+        assert_eq!(option.unwrap(), (" * ".into(), " / ".into()));
 
         let line = "5 / 5";
-        let option = mutants::replacement_from_line(&line);
-        assert_eq!(option.unwrap(), ("/".into(), "*".into()));
+        let option = mutants::replacement_from_line(&line, &replacements);
+        assert_eq!(option.unwrap(), (" / ".into(), " * ".into()));
     }
 
     #[test]
     fn test_replacement_from_line_conjunctions() {
+        let mutation_types = vec![
+            MutationType::MathOps,
+            MutationType::Conjunctions,
+            MutationType::Booleans,
+            MutationType::ControlFlow,
+            MutationType::CompOps,
+            MutationType::Numbers,
+        ];
+
+        let replacements = build_replacements(&mutation_types);
         let line = "True and False";
-        let option = mutants::replacement_from_line(&line);
+        let option = mutants::replacement_from_line(&line, &replacements);
         assert_eq!(option.unwrap(), (" and ".into(), " or ".into()));
 
         let line = "True or False";
-        let option = mutants::replacement_from_line(&line);
+        let option = mutants::replacement_from_line(&line, &replacements);
         assert_eq!(option.unwrap(), (" or ".into(), " and ".into()));
     }
 
     #[test]
     fn test_replacement_from_line_comparison_operators() {
+        let mutation_types = vec![
+            MutationType::MathOps,
+            MutationType::Conjunctions,
+            MutationType::Booleans,
+            MutationType::ControlFlow,
+            MutationType::CompOps,
+            MutationType::Numbers,
+        ];
+
+        let replacements = build_replacements(&mutation_types);
+
         let line = "5 == 5";
-        let option = mutants::replacement_from_line(&line);
+        let option = mutants::replacement_from_line(&line, &replacements);
         assert_eq!(option.unwrap(), ("==".into(), "!=".into()));
 
         let line = "5 != 5";
-        let option = mutants::replacement_from_line(&line);
+        let option = mutants::replacement_from_line(&line, &replacements);
         assert_eq!(option.unwrap(), ("!=".into(), "==".into()));
 
         let line = "5 > 5";
-        let option = mutants::replacement_from_line(&line);
-        assert_eq!(option.unwrap(), (">".into(), "<".into()));
+        let option = mutants::replacement_from_line(&line, &replacements);
+        assert_eq!(option.unwrap(), (" > ".into(), " < ".into()));
 
         let line = "5 < 5";
-        let option = mutants::replacement_from_line(&line);
-        assert_eq!(option.unwrap(), ("<".into(), ">".into()));
+        let option = mutants::replacement_from_line(&line, &replacements);
+        assert_eq!(option.unwrap(), (" < ".into(), " > ".into()));
+    }
+
+    #[test]
+    fn test_mutant_insert() {
+        let multiline_string = "def add(a, b):
+    return a + b";
+
+        let temp_dir = tempdir().unwrap();
+        let base_path = temp_dir.path();
+        let file_path_original = base_path.join("script.py");
+
+        let temp_dir_copy = tempdir().unwrap();
+        let base_path_copy = temp_dir.path();
+        let file_path_copy = base_path_copy.join("script.py");
+
+        let mut file_original = File::create(&file_path_original).unwrap();
+        let mut file_copy = File::create(&file_path_copy).unwrap();
+        write!(file_original, "{}", multiline_string).expect("Failed to write to temporary file");
+        write!(file_copy, "{}", multiline_string).expect("Failed to write to temporary file");
+
+        let mutant = mutants::Mutant {
+            file_path: file_path_original.clone(),
+            line_number: 2,
+            before: " + ".into(),
+            after: " - ".into(),
+            old_line: "    return a + b".into(),
+        };
+
+        mutant.insert().unwrap();
+
+        let result = read_to_string(&file_path_original).unwrap();
+        let desired_result = String::from("def add(a, b):\n    return a - b\n");
+        assert_eq!(result, desired_result);
+
+        mutant.remove().unwrap();
+
+        let result = read_to_string(&file_path_original).unwrap();
+        let desired_result = String::from("def add(a, b):\n    return a + b\n");
+        assert_eq!(result, desired_result);
+
+        mutant.insert_in_new_root(&base_path, &base_path_copy);
+        let result = read_to_string(file_path_copy).unwrap();
+        let desired_result = String::from("def add(a, b):\n    return a - b\n");
+        assert_eq!(result, desired_result);
+
+        let file_name_str = file_path_original.clone().into_os_string();
+        let file_name_str = file_name_str
+            .to_str()
+            .expect("Failed to convert file path to string!")
+            .yellow();
+
+        let display = format!("{mutant}");
     }
 }
