@@ -20,6 +20,9 @@ To install `pymute` make sure you have rust and cargo installed on your system
 its toolchain: https://www.rust-lang.org/tools/install
 
 You can install `pymute` via cargo crom [crates.io](https://crates.io/crates/pymute).
+```
+cargo install pymute
+```
 
 Alternatively, you can install `pymute` via cargo from GitHub as:
 ```
