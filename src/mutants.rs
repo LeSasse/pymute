@@ -1,3 +1,76 @@
+//! # Mutant Generation Module
+//!
+//! This module provides functionality to identify and mutate specific parts of Python codebases
+//! based on predefined mutation criteria. It supports various mutation types including arithmetic
+//! operations, boolean expressions, control flow alterations, and more. The primary purpose of this
+//! module is to assist in mutation testing by generating potential code mutants, helping developers
+//! and testers to identify how well a test suite can detect injected faults.
+//!
+//! ## Features
+//!
+//! - **Mutation Identification**: Scans Python files to identify possible points for mutation
+//!   based on the specified mutation types.
+//! - **Mutation Application**: Capable of applying mutations directly to the code, thereby
+//!   generating different mutant variants which can be used for testing the effectiveness of
+//!   test suites.
+//! - **Support for Multiple Mutation Types**: Handles a variety of mutation types including,
+//!   but not limited to, mathematical operations, boolean logic mutations, and control flow changes.
+//!
+//! ## Usage
+//!
+//! The main entry points of this module are:
+//! - `find_mutants(glob_expression, mutation_types)`: Scans files matching the glob pattern and identifies
+//!   potential mutants based on the provided mutation types.
+//! - `Mutant::insert()`, `Mutant::insert_in_new_root()`, and `Mutant::remove()`: Methods to apply or remove
+//!   mutations on the code files.
+//!
+//! Ensure that the `glob` crate is correctly configured and that the path specifications align with the
+//! target filesystem structure.
+//!
+//! ## Example
+//!
+//! To use this module to find and apply mutations in a temporary directory (preferred way):
+//!
+//! ```rust
+//! use pymute::mutants::{MutationType, find_mutants};
+//! use cp_r::CopyOptions;
+//! use std::path::PathBuf;
+//! use tempfile::tempdir;
+//!
+//! let project_root = PathBuf::from(".");
+//! let glob_pattern = "**/*.py";
+//! let mutation_types = &[MutationType::MathOps, MutationType::Booleans];
+//! let mutants = find_mutants(glob_pattern, mutation_types).expect("Error finding mutants");
+//!
+//! for mutant in mutants {
+//!     let dir = tempdir().expect("Failed to create temporary directory!");
+//!     mutant.insert_in_new_root(&project_root, dir.path()).expect("Error inserting mutant");
+//!     mutant.remove().expect("Error removing mutant")
+//!     dir.close().unwrap();
+//! }
+//! ```
+//!
+//! To use this module to find and apply mutations in place (removal is not well-tested and reliable as of yet):
+//!
+//! ```rust
+//! use mutant_generator::MutationType;
+//!
+//! let glob_pattern = "**/*.py";
+//! let mutation_types = &[MutationType::MathOps, MutationType::Booleans];
+//! let mutants = find_mutants(glob_pattern, mutation_types).expect("Error finding mutants");
+//!
+//! for mutant in mutants {
+//!     mutant.insert().expect("Error inserting mutant");
+//!     mutant.remove().expect("Error removing mutant")
+//! }
+//! ```
+//!
+//! ## Dependencies
+//!
+//! This module depends on external crates such as `glob` for file pattern matching, `regex` for text
+//! manipulation, and `colored` for enhancing output readability by coloring text.
+//!
+
 use clap::ValueEnum;
 use colored::Colorize;
 use glob::glob;

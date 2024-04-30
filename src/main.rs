@@ -128,12 +128,12 @@ fn main() {
 
     if args.inplace {
         runner::run_mutants_inplace(
-            &mutants,
             &args.root,
-            &args.tests,
-            &args.output_level,
+            &mutants,
             &args.runner,
+            &args.tests,
             &args.environment,
+            &args.output_level,
             &args.num_threads,
         )
     } else if let Some(n) = args.num_threads {
@@ -142,12 +142,12 @@ fn main() {
             .build_global()
             .expect("Failed to set the number of threads using rayon.");
         runner::run_mutants(
-            &mutants,
             &args.root,
-            &args.tests,
-            &args.output_level,
+            &mutants,
             &args.runner,
+            &args.tests,
             &args.environment,
+            &args.output_level,
         );
     } else {
         rayon::ThreadPoolBuilder::new()
@@ -155,12 +155,12 @@ fn main() {
             .build_global()
             .expect("Failed to set the number of threads using rayon.");
         runner::run_mutants(
-            &mutants,
             &args.root,
-            &args.tests,
-            &args.output_level,
+            &mutants,
             &args.runner,
+            &args.tests,
             &args.environment,
+            &args.output_level,
         );
     }
 }

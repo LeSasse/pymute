@@ -1,4 +1,48 @@
-//! Module to run pytest for each mutant in a temporary directory in parallel.
+//! Module to run pytest or tox for each mutant in a temporary directory in parallel.
+//!
+//! This Rust module provides functionalities to execute test suites against Python code mutants. It facilitates
+//! the identification of weaknesses in test suites by running them against code variations (mutants) where
+//! specific elements have been programmatically altered. It supports running these tests in isolated environments
+//! using temporary directories (preferred) or in-place (not preferred), leveraging parallel processing capabilities to enhance performance.
+//!
+//! ## Features
+//!
+//! - **Parallel Execution**: Utilizes `rayon` for concurrent execution of tests across multiple mutants.
+//! - **Flexible Test Runners**: Supports different test runners like Pytest and Tox, providing versatility in
+//!   how Python tests are executed.
+//! - **Isolated Test Environments**: Employs `tempfile` for creating temporary directories, ensuring that
+//!   test runs do not interfere with each other and the original codebase remains unaltered.
+//! - **Detailed Progress Tracking**: Integrates `indicatif` for real-time progress tracking and logging, enhancing
+//!   visibility into the testing process.
+//! - **Output Customization**: Offers different levels of output verbosity to tailor the feedback from the test
+//!   runs according to user preference.
+//!
+//! ## Usage
+//!
+//! To use this module, specify the root directory of the Python project, a list of mutants, the desired test
+//! runner, and the path to the tests. You can choose the level of output detail and whether to run tests in a
+//! temporary directory or in-place.
+//!
+//! ```no_run
+//! use pymute::runner::{Runner, OutputLevel, run_mutants};
+//! use pymute::mutants::{find_mutants, MutationType};
+//! use std::path::PathBuf;
+//!
+//! let root = PathBuf::from("path/to/python/project");
+//! let mutation_types = &[MutationType::MathOps, MutationType::Booleans];
+//! let mutants = find_mutants(glob_pattern, mutation_types).expect("Error finding mutants");
+//! let tests = "tests/".to_string();
+//! let runner = Runner::Pytest;
+//! let output_level = OutputLevel::Process;
+//!
+//! run_mutants(&root, &mutants, &runner, &tests, &None, &output_level);
+//! ```
+//!
+//! ## Dependencies
+//!
+//! This module depends on external crates such as `rayon` for parallelism, `tempfile` for managing temporary
+//! directories, `indicatif` for progress reporting, and `cp_r` for directory copying.
+//!
 
 use crate::mutants::Mutant;
 use cp_r::CopyOptions;
@@ -43,17 +87,20 @@ pub enum OutputLevel {
 ///
 /// Parameters
 /// ----------
-/// mutants: Vec of Mutants for which to run tests in individual sub-processes.
 /// root: PathBuf to the root of the original python project.
-/// tests: Path to the tests to run via tests as string. Only releveant if the runner
-/// is
+/// mutants: Vec of Mutants for which to run tests in individual sub-processes.
+/// runner: Which runner to use to run the test suite.
+/// tests: Path to the tests to run via tests as string. Only relevant if the runner
+/// is runner::Runner::Pytest.
+/// environment: If running via Tox, this environment is passed over to the `-e` option.
+/// output_level: How much to print while running the mutant.
 pub fn run_mutants(
-    mutants: &Vec<Mutant>,
     root: &PathBuf,
-    tests: &String,
-    output_level: &OutputLevel,
+    mutants: &Vec<Mutant>,
     runner: &Runner,
+    tests: &String,
     environment: &Option<String>,
+    output_level: &OutputLevel,
 ) {
     let bar = ProgressBar::new(mutants.len().try_into().unwrap());
     bar.set_style(
@@ -85,13 +132,28 @@ pub fn run_mutants(
         });
 }
 
+/// Run tests for all mutants each in place.
+///
+/// This is not that well tested yet, and the preferred option is to use `run_mutants`
+/// to test each mutant in a temporary directory so that mutants don't affect each
+/// other.
+///
+/// Parameters
+/// ----------
+/// root: PathBuf to the root of the original python project.
+/// mutants: Vec of Mutants for which to run tests in individual sub-processes.
+/// runner: Which runner to use to run the test suite.
+/// tests: Path to the tests to run via tests as string. Only relevant if the runner
+/// is runner::Runner::Pytest.
+/// environment: If running via Tox, this environment is passed over to the `-e` option.
+/// output_level: How much to print while running the mutant.
 pub fn run_mutants_inplace(
-    mutants: &[Mutant],
     root: &PathBuf,
-    tests: &String,
-    output_level: &OutputLevel,
+    mutants: &[Mutant],
     runner: &Runner,
+    tests: &String,
     environment: &Option<String>,
+    output_level: &OutputLevel,
     num_threads: &Option<usize>,
 ) {
     let bar = ProgressBar::new(mutants.len().try_into().unwrap());
@@ -131,6 +193,7 @@ pub fn run_mutants_inplace(
         })
 }
 
+/// Run test for one mutant in place.
 fn run_mutant_inplace(
     mutant: &Mutant,
     root: &PathBuf,
@@ -372,12 +435,12 @@ print(res) # print the result +
         assert_eq!(mutants_vec.len(), 7);
 
         runner::run_mutants(
-            &mutants_vec,
             &PathBuf::from(base_path),
-            &".".into(),
-            &runner::OutputLevel::Missed,
+            &mutants_vec,
             &runner::Runner::Pytest,
+            &".".into(),
             &None,
+            &runner::OutputLevel::Missed,
         );
 
         temp_dir.close().unwrap();
