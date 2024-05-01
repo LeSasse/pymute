@@ -23,16 +23,16 @@
 //! runner, and the path to the tests. You can choose the level of output detail and whether to run tests in a
 //! temporary directory or in-place.
 //!
-//! ```no_run
+//! ```
 //! use pymute::runner::{Runner, OutputLevel, run_mutants};
 //! use pymute::mutants::{find_mutants, MutationType};
 //! use std::path::PathBuf;
 //!
 //! let root = PathBuf::from("path/to/python/project");
 //! let mutation_types = &[MutationType::MathOps, MutationType::Booleans];
-//! let glob_pattern = "**/*.py";
+//! let glob_pattern = "my_module/**/*.py";
 //! let mutants = find_mutants(glob_pattern, mutation_types).expect("Error finding mutants");
-//! let tests = "tests/".to_string();
+//! let tests = "my_module/tests/".to_string();
 //! let runner = Runner::Pytest;
 //! let output_level = OutputLevel::Process;
 //!

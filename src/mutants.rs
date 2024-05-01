@@ -31,14 +31,14 @@
 //!
 //! To use this module to find and apply mutations in a temporary directory (preferred way):
 //!
-//! ```run
+//! ```
 //! use pymute::mutants::{MutationType, find_mutants};
 //! use cp_r::CopyOptions;
 //! use std::path::PathBuf;
 //! use tempfile::tempdir;
 //!
 //! let project_root = PathBuf::from(".");
-//! let glob_pattern = "**/*.py";
+//! let glob_pattern = "my_module/**/*.py";
 //! let mutation_types = &[MutationType::MathOps, MutationType::Booleans];
 //! let mutants = find_mutants(glob_pattern, mutation_types).expect("Error finding mutants");
 //!
@@ -52,10 +52,10 @@
 //!
 //! To use this module to find and apply mutations in place (removal is not well-tested and reliable as of yet):
 //!
-//! ```run
+//! ```
 //! use pymute::mutants::{find_mutants, MutationType};
 //!
-//! let glob_pattern = "**/*.py";
+//! let glob_pattern = "my_module/**/*.py";
 //! let mutation_types = &[MutationType::MathOps, MutationType::Booleans];
 //! let mutants = find_mutants(glob_pattern, mutation_types).expect("Error finding mutants");
 //!
