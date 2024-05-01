@@ -29,11 +29,16 @@ pub struct Cli {
     /// Path for tests that should be run. This should be
     /// relative from the root of the python project.
     /// By default, it will simply use "."
-    /// (i.e. run all tests found under the root).
+    /// (i.e. run all tests found under the root). This option is ignored when
+    /// running your tests via tox, because tox will run whatever commands
+    /// you specify in your `tox.ini` file. Instead set the `--environment` option
+    /// to run specific tox test environments.
     #[arg(short, long)]
     #[arg(default_value = ".")]
     tests: String,
 
+    /// Number of threads to run individual mutants in parallel in different
+    /// temporary directories.
     #[arg(short, long)]
     num_threads: Option<usize>,
 
@@ -72,7 +77,7 @@ pub struct Cli {
     ], value_delimiter=',')]
     mutation_types: Vec<MutationType>,
 
-    /// Whether to run inplace.
+    /// Whether to run inplace. For now not the recommended way of running pymute.
     #[arg(short, long)]
     inplace: bool,
 

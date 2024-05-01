@@ -45,7 +45,6 @@
 //! for mutant in mutants {
 //!     let dir = tempdir().expect("Failed to create temporary directory!");
 //!     mutant.insert_in_new_root(&project_root, dir.path()).expect("Error inserting mutant");
-//!     mutant.remove().expect("Error removing mutant");
 //!     dir.close().unwrap();
 //! }
 //! ```

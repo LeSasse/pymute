@@ -161,7 +161,9 @@ for mutants in files that match it. Importantly, `pymute` will automatically fil
 out files that start with `"test_"` and files that end with `*_test.py` to avoid
 creating mutations for pytest tests. It is also important to wrap the glob
 expression in a string, so that its not actually interpreted as a glob expression
-by your shell but handed over to `pymute` as a string.
+by your shell but handed over to `pymute` as a string. Lastly, note that the `--modules`
+option is interpreted as relative from the root (first positional argument)
+you specify i.e. "." in the example.
 
 ```
 pymute . --output-level caught --num-threads 4 --modules "julearn/**/*.py"
@@ -192,9 +194,11 @@ interesting `MISSED` mutations, each run still takes quite a bit of time.
 Often, you just want to focus on improving tests for a specific module, and
 so running the whole test suite is a waste of time. You create or change some module
 and you then want to perform mutation testing for the tests that specifically are meant
-to catch regressions in these modules. You can do this by specififying the `--tests`
-option, which will run `python -m pytest` for only these tests. For example, we
-might focus on the modules in `julearn/model_selection`. We can run this as:
+to catch regressions in these modules. You can do this by specifying the `--tests`
+option, which will run `python -m pytest` for only these tests. The `--tests` option,
+like the `--modules` option is interpreted relative from the specified project root.
+For example, we might focus on the modules in `julearn/model_selection`. 
+We can run this as:
 
 ```
 pymute . \
