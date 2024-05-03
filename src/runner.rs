@@ -47,9 +47,7 @@
 
 use crate::mutants::Mutant;
 use cp_r::CopyOptions;
-use indicatif::{
-    self, style::ProgressStyle, ParallelProgressIterator, ProgressBar, ProgressIterator,
-};
+use indicatif::{self, style::ProgressStyle, ParallelProgressIterator, ProgressBar};
 
 use clap::ValueEnum;
 use rayon::prelude::*;
@@ -133,124 +131,6 @@ pub fn run_mutants(
         });
 }
 
-/// Run tests for all mutants each in place.
-///
-/// This is not that well tested yet, and the preferred option is to use `run_mutants`
-/// to test each mutant in a temporary directory so that mutants don't affect each
-/// other.
-///
-/// Parameters
-/// ----------
-/// root: PathBuf to the root of the original python project.
-/// mutants: Vec of Mutants for which to run tests in individual sub-processes.
-/// runner: Which runner to use to run the test suite.
-/// tests: Path to the tests to run via tests as string. Only relevant if the runner
-/// is runner::Runner::Pytest.
-/// environment: If running via Tox, this environment is passed over to the `-e` option.
-/// output_level: How much to print while running the mutant.
-pub fn run_mutants_inplace(
-    root: &PathBuf,
-    mutants: &[Mutant],
-    runner: &Runner,
-    tests: &String,
-    environment: &Option<String>,
-    output_level: &OutputLevel,
-    num_threads: &Option<usize>,
-) {
-    let bar = ProgressBar::new(mutants.len().try_into().unwrap());
-    bar.set_style(
-        ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-        )
-        .unwrap(),
-    );
-    mutants
-        .iter()
-        .progress_with(bar.clone())
-        .for_each(|mutant| {
-            bar.set_message(format!("[{}]: {mutant}\r", "RUNNING".yellow()));
-            let result = run_mutant_inplace(
-                mutant,
-                root,
-                tests,
-                output_level,
-                runner,
-                environment,
-                num_threads,
-            )
-            .unwrap_or_else(|_| panic!("Mutant run failed for {}", mutant));
-
-            match result {
-                MutantResult::Missed => {
-                    bar.println(format!("[{}] Mutant Survived: {}", "MISSED".red(), mutant));
-                }
-                _ => {
-                    if let OutputLevel::Missed = output_level {
-                    } else {
-                        bar.println(format!("[{}] Mutant Killed: {}", "CAUGHT".green(), mutant));
-                    };
-                }
-            }
-        })
-}
-
-/// Run test for one mutant in place.
-fn run_mutant_inplace(
-    mutant: &Mutant,
-    root: &PathBuf,
-    tests_glob: &String,
-    output_level: &OutputLevel,
-    runner: &Runner,
-    environment: &Option<String>,
-    num_threads: &Option<usize>,
-) -> Result<MutantResult, Box<dyn Error>> {
-    mutant.insert().expect("Failed to insert the mutant!");
-
-    // build the correct command depending on arguments
-    let program = match runner {
-        Runner::Pytest => "python",
-        Runner::Tox => "tox",
-    };
-    let mut command = Command::new(program);
-
-    match runner {
-        Runner::Pytest => {
-            command
-                .arg("-B")
-                .arg("-m")
-                .arg("pytest")
-                .arg(tests_glob)
-                .arg("-x");
-            if let Some(n) = num_threads {
-                command.arg(format!("-n {n}"));
-            };
-        }
-        Runner::Tox => {
-            if let Some(env) = environment {
-                command.arg(format!("-e {env}"));
-            };
-        }
-    };
-
-    match output_level {
-        OutputLevel::Process => (),
-        _ => {
-            command.stdout(Stdio::null()).stderr(Stdio::null());
-        }
-    };
-
-    let status = command.current_dir(root).status()?;
-
-    mutant.remove().expect("Failed to remove the mutant!");
-
-    if status.success() {
-        Ok(MutantResult::Missed)
-    } else {
-        Ok(MutantResult::Caught)
-    }
-}
-
-/// Run tests for one mutant in a temporary directory
 fn run_mutant(
     mutant: &Mutant,
     root: &PathBuf,

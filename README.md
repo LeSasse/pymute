@@ -1,5 +1,7 @@
 # Pymute: A Mutation Testing Tool for Python/Pytest written in Rust
 
+[![codecov](https://codecov.io/gh/LeSasse/pymute/graph/badge.svg?token=HLWXWTFVNI)](https://codecov.io/gh/LeSasse/pymute)
+
 Pymute is inspired by my experience of using [cargo mutants](https://mutants.rs/).
 I used it in a rust project, really enjoyed it, so I had to search for something
 similar for python/pytest projects. Quickly found [mut.py](https://github.com/mutpy/mutpy)
