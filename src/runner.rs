@@ -55,8 +55,10 @@ use rayon::prelude::*;
 use std::error::Error;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
-use tempfile::tempdir;
+use tempfile::{tempdir, tempdir_in, TempDir};
 
 use colored::Colorize;
 
@@ -109,29 +111,62 @@ pub fn run_mutants(
         .unwrap(),
     );
 
+    let top_level_temp_dir = tempdir().expect("Failed to create temporary directory!");
+
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+        println!("Ctrl+C pressed. Exiting...");
+    })
+    .expect("Error setting Ctrl-C handler");
+
     mutants
         .par_iter()
         .progress_with(bar.clone())
         .for_each(|mutant| {
-            bar.set_message(format!("[{}]: {mutant}\r", "RUNNING".yellow()));
-            let result = run_mutant(mutant, root, tests, output_level, runner, environment)
+            if running.load(Ordering::SeqCst) {
+                bar.set_message(format!("[{}]: {mutant}\r", "RUNNING".yellow()));
+                let result = run_mutant(
+                    &top_level_temp_dir,
+                    mutant,
+                    root,
+                    tests,
+                    output_level,
+                    runner,
+                    environment,
+                )
                 .unwrap_or_else(|_| panic!("Mutant run failed for {mutant}"));
 
-            match result {
-                MutantResult::Missed => {
-                    bar.println(format!("[{}] Mutant Survived: {}", "MISSED".red(), mutant));
-                }
-                _ => {
-                    if let OutputLevel::Missed = output_level {
-                    } else {
-                        bar.println(format!("[{}] Mutant Killed: {}", "CAUGHT".green(), mutant));
-                    };
+                match result {
+                    MutantResult::Missed => {
+                        bar.println(format!("[{}] Mutant Survived: {}", "MISSED".red(), mutant));
+                    }
+                    _ => {
+                        if let OutputLevel::Missed = output_level {
+                        } else {
+                            bar.println(format!(
+                                "[{}] Mutant Killed: {}",
+                                "CAUGHT".green(),
+                                mutant
+                            ));
+                        };
+                    }
                 }
             }
         });
+
+    // Check if the program was interrupted
+    if !running.load(Ordering::SeqCst) {
+        println!("Interrupted. Cleaning up...");
+        top_level_temp_dir
+            .close()
+            .expect("Problem cleaning up the temporary directory.");
+    }
 }
 
 fn run_mutant(
+    work_dir: &TempDir,
     mutant: &Mutant,
     root: &PathBuf,
     tests_glob: &String,
@@ -139,7 +174,7 @@ fn run_mutant(
     runner: &Runner,
     environment: &Option<String>,
 ) -> Result<MutantResult, Box<dyn Error>> {
-    let dir = tempdir().expect("Failed to create temporary directory!");
+    let dir = tempdir_in(work_dir).expect("Failed to create temporary directory!");
 
     let root_path = root;
     let _stats = CopyOptions::new()
