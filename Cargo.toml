@@ -1,7 +1,7 @@
 [package]
 name = "pymute"
 author = "Leonard Sasse"
-version = "0.1.2"
+version = "0.2.1"
 edition = "2021"
 license = "Unlicense"
 readme = "README.md"
@@ -23,7 +23,7 @@ path = "src/main.rs"
 clap = { version = "4.5.4", features = ["cargo", "derive"]}
 colored = "2.1.0"
 cp_r = "0.5.1"
-ctrlc = "3.4.4"
+ctrlc = {version = "3.4.4", features = ["termination"]}
 glob = "0.3.1"
 indicatif = { version = "0.17.8", features = ["rayon"]}
 rand = "0.8.5"
