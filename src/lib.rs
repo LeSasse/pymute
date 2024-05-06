@@ -1,11 +1,11 @@
 //! Provide mutation testing functions for python codebases.
 
-use crate::mutants::{find_mutants, MutationType};
+use crate::mutants::{find_mutants, Mutant, MutationType};
 
 use rand::{seq::IteratorRandom, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use std::{error::Error, fmt, path::PathBuf};
+use std::{error::Error, fmt, fs::File, io, path::PathBuf};
 
 pub mod mutants;
 pub mod runner;
@@ -22,8 +22,12 @@ pub fn run(
     mutation_types: &[MutationType],
     list: &bool,
     seed: &u64,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<String, Box<dyn Error>> {
     let modules: PathBuf = [root, &PathBuf::from(modules)].iter().collect();
+
+    let cache_path: PathBuf = [root, &PathBuf::from(".pymute_cache.csv")].iter().collect();
+
+    let file = File::create(cache_path)?;
 
     let mutants = match max_mutants {
         Some(max) => {
@@ -54,14 +58,22 @@ pub fn run(
         for mutant in &mutants {
             println!("{mutant}");
         }
-        return Ok(());
+        return Ok(format!("Found and listed {} mutants", mutants.len()));
     }
 
     let _n_mutants = mutants.len();
 
-    runner::run_mutants(root, &mutants, runner, tests, environment, output_level)?;
+    let cached_result =
+        runner::run_mutants(root, &mutants, runner, tests, environment, output_level)?;
 
-    Ok(())
+    let mut wtr = csv::Writer::from_writer(file);
+
+    for (i, (status, mutant)) in cached_result.into_iter().enumerate() {
+        let mut mutant_result = mutant.clone();
+        mutant_result.status = Box::new(status.clone());
+        wtr.serialize(mutant_result)?;
+    }
+    Ok("Results written to cache".to_string())
 }
 
 #[derive(Debug)]

@@ -45,7 +45,7 @@
 //! directories, `indicatif` for progress reporting, and `cp_r` for directory copying.
 //!
 
-use crate::mutants::Mutant;
+use crate::mutants::{Mutant, MutantStatus};
 use cp_r::CopyOptions;
 use indicatif::{self, style::ProgressStyle, ParallelProgressIterator, ProgressBar};
 
@@ -99,14 +99,14 @@ pub enum OutputLevel {
 /// is runner::Runner::Pytest.
 /// environment: If running via Tox, this environment is passed over to the `-e` option.
 /// output_level: How much to print while running the mutant.
-pub fn run_mutants(
+pub fn run_mutants<'a>(
     root: &PathBuf,
-    mutants: &Vec<Mutant>,
+    mutants: &'a Vec<Mutant>,
     runner: &Runner,
     tests: &str,
     environment: &Option<String>,
     output_level: &OutputLevel,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<Vec<(MutantStatus, &'a Mutant)>, Box<dyn Error>> {
     let bar = ProgressBar::new(mutants.len().try_into()?);
     bar.set_style(ProgressStyle::with_template(
         "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
@@ -121,10 +121,10 @@ pub fn run_mutants(
         println!("Ctrl+C pressed. Exiting...");
     })?;
 
-    mutants
+    let cached_result: Vec<(MutantStatus, &Mutant)> = mutants
         .par_iter()
         .progress_with(bar.clone())
-        .for_each(|mutant| {
+        .map(|mutant| {
             if running.load(Ordering::SeqCst) {
                 bar.set_message(format!("[{}]: {mutant}\r", "RUNNING".yellow()));
                 let result = run_mutant(
@@ -139,8 +139,9 @@ pub fn run_mutants(
                 .unwrap_or_else(|_| panic!("Mutant run failed for {mutant}"));
 
                 match result {
-                    MutantResult::Missed => {
+                    MutantStatus::Missed => {
                         bar.println(format!("[{}] Mutant Survived: {}", "MISSED".red(), mutant));
+                        (MutantStatus::Missed, mutant)
                     }
                     _ => {
                         if let OutputLevel::Missed = output_level {
@@ -151,19 +152,23 @@ pub fn run_mutants(
                                 mutant
                             ));
                         };
+                        (MutantStatus::Caught, mutant)
                     }
                 }
+            } else {
+                (MutantStatus::NotRun, mutant)
             }
-        });
+        })
+        .collect();
 
     top_level_temp_dir.close()?;
 
     // Check if the program was interrupted
     if !running.load(Ordering::SeqCst) {
-        println!("Interrupted. Cleaning up...");
-        return Err(Box::new(KeyboardInterrupt {}));
+        println!("Interrupted. Cleaning up and updating cache...");
     }
-    Ok(())
+
+    Ok(cached_result)
 }
 
 fn run_mutant(
@@ -174,7 +179,7 @@ fn run_mutant(
     output_level: &OutputLevel,
     runner: &Runner,
     environment: &Option<String>,
-) -> Result<MutantResult, Box<dyn Error>> {
+) -> Result<MutantStatus, Box<dyn Error>> {
     let dir = tempdir_in(work_dir).expect("Failed to create temporary directory!");
 
     let root_path = root;
@@ -221,15 +226,10 @@ fn run_mutant(
     dir.close()?;
 
     if status.success() {
-        Ok(MutantResult::Missed)
+        Ok(MutantStatus::Missed)
     } else {
-        Ok(MutantResult::Caught)
+        Ok(MutantStatus::Caught)
     }
-}
-
-enum MutantResult {
-    Caught,
-    Missed,
 }
 
 #[derive(Debug)]

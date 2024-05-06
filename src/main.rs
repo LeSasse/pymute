@@ -111,9 +111,9 @@ fn main() {
         &args.list,
         &args.seed,
     ) {
-        Ok(_) => println!("{}!", "Success".green()),
+        Ok(msg) => eprintln!("{}: {msg}!", "Success".green()),
         Err(err) => {
-            println!("{}: {}", "Error".red(), err);
+            eprintln!("{}: {}", "Error".red(), err);
             process::exit(1);
         }
     };

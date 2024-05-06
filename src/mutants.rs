@@ -74,11 +74,15 @@ use clap::ValueEnum;
 use colored::Colorize;
 use glob::glob;
 use regex::Regex;
-use std::error::Error;
-use std::fmt;
-use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
+use std::{
+    error::Error,
+    fmt,
+    fs::{self, File},
+    io::{BufRead, BufReader},
+    ops::Deref,
+    path::{Path, PathBuf},
+};
 
 /// A semantic grouping of different types of possible mutations.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -141,8 +145,15 @@ pub fn find_mutants(
     Ok(possible_mutants)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MutantStatus {
+    Caught,
+    Missed,
+    NotRun,
+}
+
 /// Define parameters of a potential mutant for a python program.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Mutant {
     /// Path to python file that can be mutated.
     pub file_path: PathBuf,
@@ -152,6 +163,8 @@ pub struct Mutant {
     pub before: String,
     /// The replacement string.
     pub after: String,
+    /// Status of the Mutant
+    pub status: Box<MutantStatus>,
     /// The line before inserting the mutant.
     old_line: String,
 }
@@ -320,6 +333,7 @@ fn add_mutants_from_file(
                     line_number: line_nr + 1,
                     before,
                     after,
+                    status: Box::new(MutantStatus::NotRun),
                     old_line: line,
                 };
                 mutant_vec.push(mutant);
