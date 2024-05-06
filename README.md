@@ -11,8 +11,7 @@ versions.
 
 Pymute takes a somewhat naive approach and simply creates a temporary directory
 for every mutant, and then runs pytest in that working directory independent
-of other mutations (note that if `pymute` is interrupted, some manual clean up
-of `/tmp` may be required). Mutations are inserted by simply manipulating the text in the
+of other mutations. Mutations are inserted by simply manipulating the text in the
 *.py files rather than operating on the AST and therefore should work across most versions.
 
 ## Installation

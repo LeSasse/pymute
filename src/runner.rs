@@ -52,12 +52,16 @@ use indicatif::{self, style::ProgressStyle, ParallelProgressIterator, ProgressBa
 use clap::ValueEnum;
 use rayon::prelude::*;
 
-use std::error::Error;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-
+use std::{
+    error::Error,
+    fmt,
+    path::PathBuf,
+    process::{Command, Stdio},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 use tempfile::{tempdir, tempdir_in, TempDir};
 
 use colored::Colorize;
@@ -99,27 +103,23 @@ pub fn run_mutants(
     root: &PathBuf,
     mutants: &Vec<Mutant>,
     runner: &Runner,
-    tests: &String,
+    tests: &str,
     environment: &Option<String>,
     output_level: &OutputLevel,
-) {
-    let bar = ProgressBar::new(mutants.len().try_into().unwrap());
-    bar.set_style(
-        ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-        )
-        .unwrap(),
-    );
+) -> Result<(), Box<dyn Error>> {
+    let bar = ProgressBar::new(mutants.len().try_into()?);
+    bar.set_style(ProgressStyle::with_template(
+        "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )?);
 
-    let top_level_temp_dir = tempdir().expect("Failed to create temporary directory!");
+    let top_level_temp_dir = tempdir()?;
 
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
         println!("Ctrl+C pressed. Exiting...");
-    })
-    .expect("Error setting Ctrl-C handler");
+    })?;
 
     mutants
         .par_iter()
@@ -156,20 +156,21 @@ pub fn run_mutants(
             }
         });
 
+    top_level_temp_dir.close()?;
+
     // Check if the program was interrupted
     if !running.load(Ordering::SeqCst) {
         println!("Interrupted. Cleaning up...");
-        top_level_temp_dir
-            .close()
-            .expect("Problem cleaning up the temporary directory.");
+        return Err(Box::new(KeyboardInterrupt {}));
     }
+    Ok(())
 }
 
 fn run_mutant(
     work_dir: &TempDir,
     mutant: &Mutant,
     root: &PathBuf,
-    tests_glob: &String,
+    tests_glob: &str,
     output_level: &OutputLevel,
     runner: &Runner,
     environment: &Option<String>,
@@ -217,7 +218,7 @@ fn run_mutant(
 
     let status = command.current_dir(&dir).status()?;
 
-    dir.close().unwrap();
+    dir.close()?;
 
     if status.success() {
         Ok(MutantResult::Missed)
@@ -229,6 +230,16 @@ fn run_mutant(
 enum MutantResult {
     Caught,
     Missed,
+}
+
+#[derive(Debug)]
+struct KeyboardInterrupt {}
+
+impl Error for KeyboardInterrupt {}
+impl fmt::Display for KeyboardInterrupt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Program interrupted by user!")
+    }
 }
 
 #[cfg(test)]
@@ -354,10 +365,11 @@ print(res) # print the result +
             &PathBuf::from(base_path),
             &mutants_vec,
             &runner::Runner::Pytest,
-            &".".into(),
+            &".",
             &None,
             &runner::OutputLevel::Missed,
-        );
+        )
+        .expect("run_mutants failed!");
 
         temp_dir.close().unwrap();
     }
