@@ -64,8 +64,6 @@ use std::{
 };
 use tempfile::{tempdir, tempdir_in, TempDir};
 
-use colored::Colorize;
-
 /// Define the runner to use to run the test suite.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum Runner {
@@ -99,14 +97,14 @@ pub enum OutputLevel {
 /// is runner::Runner::Pytest.
 /// environment: If running via Tox, this environment is passed over to the `-e` option.
 /// output_level: How much to print while running the mutant.
-pub fn run_mutants<'a>(
+pub fn run_mutants(
     root: &PathBuf,
-    mutants: &'a Vec<Mutant>,
+    mutants: &Vec<Mutant>,
     runner: &Runner,
     tests: &str,
     environment: &Option<String>,
     output_level: &OutputLevel,
-) -> Result<Vec<(MutantStatus, &'a Mutant)>, Box<dyn Error>> {
+) -> Result<Vec<Mutant>, Box<dyn Error>> {
     let bar = ProgressBar::new(mutants.len().try_into()?);
     bar.set_style(ProgressStyle::with_template(
         "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
@@ -121,13 +119,20 @@ pub fn run_mutants<'a>(
         println!("Ctrl+C pressed. Exiting...");
     })?;
 
-    let cached_result: Vec<(MutantStatus, &Mutant)> = mutants
+    let new_mutants = mutants
         .par_iter()
         .progress_with(bar.clone())
         .map(|mutant| {
-            if running.load(Ordering::SeqCst) {
-                bar.set_message(format!("[{}]: {mutant}\r", "RUNNING".yellow()));
-                let result = run_mutant(
+            let mut new_mutant = mutant.clone();
+
+            // return early if the mutant has been caught previously
+            if mutant.status == MutantStatus::Caught {
+                return new_mutant;
+            }
+
+            let result = if running.load(Ordering::SeqCst) {
+                bar.set_message(format!("{mutant}\r"));
+                run_mutant(
                     &top_level_temp_dir,
                     mutant,
                     root,
@@ -136,28 +141,31 @@ pub fn run_mutants<'a>(
                     runner,
                     environment,
                 )
-                .unwrap_or_else(|_| panic!("Mutant run failed for {mutant}"));
+                .unwrap_or_else(|_| panic!("Mutant run failed for {mutant}"))
+            } else {
+                mutant.status.clone()
+            };
 
+            // check again separately after the test run has finished:
+            // this ensures that if a mutant was killed because of a ctrlc
+            // it is not actually cached as caught since it only failed due to
+            // user interrupt
+            if running.load(Ordering::SeqCst) {
                 match result {
                     MutantStatus::Missed => {
-                        bar.println(format!("[{}] Mutant Survived: {}", "MISSED".red(), mutant));
-                        (MutantStatus::Missed, mutant)
+                        new_mutant.status = MutantStatus::Missed;
+                        bar.println(format!("{new_mutant}"));
                     }
                     _ => {
+                        new_mutant.status = MutantStatus::Caught;
                         if let OutputLevel::Missed = output_level {
                         } else {
-                            bar.println(format!(
-                                "[{}] Mutant Killed: {}",
-                                "CAUGHT".green(),
-                                mutant
-                            ));
+                            bar.println(format!("{new_mutant}"));
                         };
-                        (MutantStatus::Caught, mutant)
                     }
                 }
-            } else {
-                (MutantStatus::NotRun, mutant)
             }
+            new_mutant
         })
         .collect();
 
@@ -165,10 +173,10 @@ pub fn run_mutants<'a>(
 
     // Check if the program was interrupted
     if !running.load(Ordering::SeqCst) {
-        println!("Interrupted. Cleaning up and updating cache...");
+        println!("Interrupted. Cleaning up and updating cache, please wait a moment...");
     }
 
-    Ok(cached_result)
+    Ok(new_mutants)
 }
 
 fn run_mutant(

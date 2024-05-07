@@ -29,7 +29,7 @@
 //!
 //! ## Example
 //!
-//! To use this module to find and apply mutations in a temporary directory (preferred way):
+//! To use this module to find and apply mutations in a temporary directory:
 //!
 //! ```
 //! use pymute::mutants::{MutationType, find_mutants};
@@ -49,21 +49,6 @@
 //! }
 //! ```
 //!
-//! To use this module to find and apply mutations in place (removal is not well-tested and reliable as of yet):
-//!
-//! ```
-//! use pymute::mutants::{find_mutants, MutationType};
-//!
-//! let glob_pattern = "my_module/**/*.py";
-//! let mutation_types = &[MutationType::MathOps, MutationType::Booleans];
-//! let mutants = find_mutants(glob_pattern, mutation_types).expect("Error finding mutants");
-//!
-//! for mutant in mutants {
-//!     mutant.insert().expect("Error inserting mutant");
-//!     mutant.remove().expect("Error removing mutant")
-//! }
-//! ```
-//!
 //! ## Dependencies
 //!
 //! This module depends on external crates such as `glob` for file pattern matching, `regex` for text
@@ -76,11 +61,11 @@ use glob::glob;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
+    cmp::Ordering,
     error::Error,
     fmt,
     fs::{self, File},
     io::{BufRead, BufReader},
-    ops::Deref,
     path::{Path, PathBuf},
 };
 
@@ -108,8 +93,8 @@ pub enum MutationType {
 ///
 /// Parameters
 /// ----------
-/// glob_expression: &str compatible with the `glob` crate.
-/// mutation_types: Collection of MutationType. Each of the mutation types specified
+/// * glob_expression: &str compatible with the `glob` crate.
+/// * mutation_types: Collection of MutationType. Each of the mutation types specified
 /// here will be used.
 pub fn find_mutants(
     glob_expression: &str,
@@ -145,11 +130,11 @@ pub fn find_mutants(
     Ok(possible_mutants)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MutantStatus {
     Caught,
-    Missed,
     NotRun,
+    Missed,
 }
 
 /// Define parameters of a potential mutant for a python program.
@@ -164,21 +149,34 @@ pub struct Mutant {
     /// The replacement string.
     pub after: String,
     /// Status of the Mutant
-    pub status: Box<MutantStatus>,
-    /// The line before inserting the mutant.
-    old_line: String,
+    pub status: MutantStatus,
 }
 
 impl Mutant {
+    pub fn new(
+        file_path: PathBuf,
+        line_number: usize,
+        before: String,
+        after: String,
+        status: MutantStatus,
+    ) -> Self {
+        Mutant {
+            file_path: file_path.canonicalize().expect("Failed to resolve path!"),
+            line_number,
+            before,
+            after,
+            status,
+        }
+    }
     /// Actually insert the mutant into a file.
     ///
     /// This will take the mutant and insert it in a copy of the python project.
     ///
     /// Parameters
     /// ----------
-    /// root: This is the path to the root of the original directory. The root
+    /// * root: This is the path to the root of the original directory. The root
     /// path will be stripped from the mutants file path.
-    /// new_root: This is the path to the root of the copied python project.
+    /// * new_root: This is the path to the root of the copied python project.
     /// The mutant file path will be joined into this one after stripping the original
     /// root. The mutant is then inserted into the copied version of the file
     /// where the potential mutant was found (i.e. it will be inserted into
@@ -236,30 +234,30 @@ impl Mutant {
 
         Ok(())
     }
+}
 
-    /// Remove the mutant.
-    ///
-    /// Remove a mutant from the original file after it has been inserted in place.
-    /// This method is not well tested and in general the temporary directory
-    /// workflow should be preferred over in place operations at the moment.
-    pub fn remove(&self) -> Result<(), Box<dyn Error>> {
-        let file_path = self.file_path.as_path();
-        let file = File::open(file_path)?;
-        let reader = BufReader::new(file);
-
-        // read all lines into a vector
-        let mut lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
-        // revert the insert
-        lines[self.line_number - 1] = self.old_line.clone();
-
-        let last = lines.pop().unwrap();
-        lines.push(format!("{last}\n"));
-        fs::write(file_path, lines.join("\n"))
-            .expect("Failed to write to file upon mutant removal!");
-
-        Ok(())
+impl Ord for Mutant {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.status.cmp(&other.status)
     }
 }
+
+impl PartialOrd for Mutant {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Mutant {
+    fn eq(&self, other: &Self) -> bool {
+        (self.file_path == other.file_path)
+            && (self.line_number == other.line_number)
+            && (self.before == other.before)
+            && (self.after == other.after)
+    }
+}
+
+impl Eq for Mutant {}
 
 impl fmt::Display for Mutant {
     // This trait requires `fmt` with this exact signature.
@@ -268,9 +266,16 @@ impl fmt::Display for Mutant {
         // stream: `f`. Returns `fmt::Result` which indicates whether the
         // operation succeeded or failed. Note that `write!` uses syntax which
         // is very similar to `println!`.
+        let status = match self.status {
+            MutantStatus::Missed => format!("[{}] Mutant Survived", "MISSED".red()),
+            MutantStatus::Caught => format!("[{}] Mutant Killed", "CAUGHT".green()),
+            MutantStatus::NotRun => format!("[{}]", "NOT RUN".yellow()),
+        };
+
         write!(
             f,
-            "{} replaced by {} in file {} on line {}",
+            "{}: {} replaced by {} in file {} on line {}",
+            status,
             self.before.green(),
             self.after.red(),
             self.file_path
@@ -328,14 +333,13 @@ fn add_mutants_from_file(
         let replacement = replacement_from_line(line_split, replacements);
         match replacement {
             Some((before, after)) => {
-                let mutant = Mutant {
-                    file_path: path.clone(),
-                    line_number: line_nr + 1,
+                let mutant = Mutant::new(
+                    path.clone(),
+                    line_nr + 1,
                     before,
                     after,
-                    status: Box::new(MutantStatus::NotRun),
-                    old_line: line,
-                };
+                    MutantStatus::NotRun,
+                );
                 mutant_vec.push(mutant);
             }
 
@@ -774,29 +778,47 @@ print(res) # print the result *
         write!(file_original, "{}", multiline_string).expect("Failed to write to temporary file");
         write!(file_copy, "{}", multiline_string).expect("Failed to write to temporary file");
 
-        let mutant = mutants::Mutant {
-            file_path: file_path_original.clone(),
-            line_number: 2,
-            before: " + ".into(),
-            after: " - ".into(),
-            old_line: "    return a + b".into(),
-        };
+        let mutant = mutants::Mutant::new(
+            file_path_original.clone(),
+            2,
+            " + ".into(),
+            " - ".into(),
+            mutants::MutantStatus::NotRun,
+        );
 
         mutant.insert().unwrap();
+    }
 
-        let result = read_to_string(&file_path_original).unwrap();
-        let desired_result = String::from("def add(a, b):\n    return a - b\n");
-        assert_eq!(result, desired_result);
+    #[test]
+    fn test_mutant_insert_in_new_root() {
+        let multiline_string = "def add(a, b):
+    return a + b";
 
-        mutant.remove().unwrap();
+        let temp_dir = tempdir().unwrap();
+        let base_path = temp_dir.path();
+        let file_path_original = base_path.join("script.py");
 
-        let result = read_to_string(&file_path_original).unwrap();
-        let desired_result = String::from("def add(a, b):\n    return a + b\n");
-        assert_eq!(result, desired_result);
+        let _temp_dir_copy = tempdir().unwrap();
+        let base_path_copy = temp_dir.path();
+        let file_path_copy = base_path_copy.join("script.py");
+
+        let mut file_original = File::create(&file_path_original).unwrap();
+        let mut file_copy = File::create(&file_path_copy).unwrap();
+        write!(file_original, "{}", multiline_string).expect("Failed to write to temporary file");
+        write!(file_copy, "{}", multiline_string).expect("Failed to write to temporary file");
+
+        let mutant = mutants::Mutant::new(
+            file_path_original.clone(),
+            2,
+            " + ".into(),
+            " - ".into(),
+            mutants::MutantStatus::NotRun,
+        );
 
         mutant
             .insert_in_new_root(base_path, base_path_copy)
             .unwrap();
+
         let result = read_to_string(file_path_copy).unwrap();
         let desired_result = String::from("def add(a, b):\n    return a - b\n");
         assert_eq!(result, desired_result);

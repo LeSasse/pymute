@@ -1,5 +1,9 @@
 # Version `0.2.1`
 
+* Add a CSV cache to remember previous progress. The cache is updated whenever the
+program is interrupted. In subsequent runs, `pymute` will then keep running mutants
+that have not been run yet, and once they are done, will also re-run previously missed
+mutants.
 * Add a [ctrlc](https://crates.io/crates/ctrlc) as a dependency to better handle SIGINT in `runner.rs` and
 reliably clean up the temporary directories
 * Improve error handling to propagate errors to `main.rs` and exit with appropriate

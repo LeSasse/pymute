@@ -1,12 +1,14 @@
 //! Provide mutation testing functions for python codebases.
 
-use crate::mutants::{find_mutants, Mutant, MutationType};
+use crate::cache::{read_csv_cache, write_csv_cache};
+use crate::mutants::{find_mutants, MutationType};
 
 use rand::{seq::IteratorRandom, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-use std::{error::Error, fmt, fs::File, io, path::PathBuf};
+use std::{error::Error, fmt, path::PathBuf};
 
+pub mod cache;
 pub mod mutants;
 pub mod runner;
 
@@ -27,8 +29,7 @@ pub fn run(
 
     let cache_path: PathBuf = [root, &PathBuf::from(".pymute_cache.csv")].iter().collect();
 
-    let file = File::create(cache_path)?;
-
+    // find mutants from the code base
     let mutants = match max_mutants {
         Some(max) => {
             let mut rng = ChaCha8Rng::seed_from_u64(*seed);
@@ -54,6 +55,21 @@ pub fn run(
         )?,
     };
 
+    // read the cache of mutants
+    // check if we found mutants that have not been cached yet and add them
+    let mutants = if cache_path.is_file() {
+        let mut cached = read_csv_cache(&cache_path)?;
+        for mutant in mutants.iter() {
+            if !cached.contains(mutant) {
+                cached.push(mutant.clone())
+            }
+        }
+        cached.sort();
+        cached
+    } else {
+        mutants
+    };
+
     if *list {
         for mutant in &mutants {
             println!("{mutant}");
@@ -66,14 +82,7 @@ pub fn run(
     let cached_result =
         runner::run_mutants(root, &mutants, runner, tests, environment, output_level)?;
 
-    let mut wtr = csv::Writer::from_writer(file);
-
-    for (i, (status, mutant)) in cached_result.into_iter().enumerate() {
-        let mut mutant_result = mutant.clone();
-        mutant_result.status = Box::new(status.clone());
-        wtr.serialize(mutant_result)?;
-    }
-    Ok("Results written to cache".to_string())
+    write_csv_cache(&cached_result, &cache_path)
 }
 
 #[derive(Debug)]
@@ -172,6 +181,60 @@ print(res) # print the result *
                 MutationType::Numbers,
             ],
             &false,
+            &34,
+        )
+        .unwrap();
+
+        // best be safe and close it
+        temp_dir.close().unwrap();
+    }
+
+    #[test]
+    fn test_run_with_cache() {
+        let multiline_string_script = "def add(a, b):
+    return a + b
+
+# this is a + comment
+def sub(a, b):
+    return a - b
+
+res = sub(5, 6) * add(7, 8)
+print(res) # print the result *
+";
+
+        let serialised = r#"file_path,line_number,before,after,status
+/projects/project/script.py,2, + , - ,NotRun
+/projects/project/script.py,65, - , + ,NotRun
+"#;
+
+        let temp_dir = tempdir().unwrap();
+        let base_path = temp_dir.path();
+        let mut script1 = File::create(base_path.join("script.py")).unwrap();
+        write!(script1, "{}", multiline_string_script).expect("Failed to write to temporary file");
+
+        let file_path_cache = base_path.join(".pymute_cache.csv");
+        {
+            let mut file_cache = File::create(&file_path_cache).unwrap();
+            write!(file_cache, "{}", serialised).expect("Failed to write to temporary file");
+        }
+
+        run(
+            &PathBuf::from(base_path),
+            "**/*.py",
+            ".",
+            &runner::OutputLevel::Missed,
+            &runner::Runner::Pytest,
+            &None,
+            &None,
+            &vec![
+                MutationType::MathOps,
+                MutationType::Conjunctions,
+                MutationType::Booleans,
+                MutationType::ControlFlow,
+                MutationType::CompOps,
+                MutationType::Numbers,
+            ],
+            &true,
             &34,
         )
         .unwrap();
